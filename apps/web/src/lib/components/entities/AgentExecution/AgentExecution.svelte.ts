@@ -174,12 +174,12 @@ export class AgentExecution extends Entity<AgentExecutionDataType> {
             });
     }
 
-    public get projection(): AgentExecutionDataType['projection'] {
-        return this.data.projection;
+    public get timeline(): AgentExecutionDataType['projection'] {
+        return this.data.timeline;
     }
 
     public get currentActivity(): AgentExecutionDataType['projection']['currentActivity'] {
-        return this.data.projection.currentActivity;
+        return this.data.timeline.currentActivity;
     }
 
     public get transportState(): AgentExecutionDataType['transportState'] {
@@ -187,11 +187,11 @@ export class AgentExecution extends Entity<AgentExecutionDataType> {
     }
 
     public get currentAttention(): AgentExecutionDataType['projection']['currentAttention'] {
-        return this.data.projection.currentAttention;
+        return this.data.timeline.currentAttention;
     }
 
     public get timelineItems(): AgentExecutionDataType['projection']['timelineItems'] {
-        return this.data.projection.timelineItems;
+        return this.data.timeline.timelineItems;
     }
 
     public get journalRecords(): AgentExecutionJournalRecordType[] {

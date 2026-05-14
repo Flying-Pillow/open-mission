@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Agent } from '../../../entities/Agent/Agent.js';
-import { AgentAdapter } from './AgentAdapter.js';
+import { AgentAdapter } from './adapter/AgentAdapter.js';
 import { AgentConnectionTester } from './AgentConnectionTester.js';
 
 describe('AgentConnectionTester', () => {

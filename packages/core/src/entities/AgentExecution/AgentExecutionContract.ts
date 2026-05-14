@@ -18,7 +18,7 @@ import {
     AgentExecutionCommandAcknowledgementSchema,
     AgentExecutionChangedSchema
 } from './AgentExecutionSchema.js';
-import { AgentExecutionTerminalSnapshotSchema } from './state/AgentExecutionTransportSchema.js';
+import { AgentExecutionTerminalSchema } from './transport/AgentExecutionTerminalSchema.js';
 import type { AgentExecutionType } from './AgentExecutionSchema.js';
 
 export const AgentExecutionContract: EntityContractType = {
@@ -37,7 +37,7 @@ export const AgentExecutionContract: EntityContractType = {
         readTerminal: {
             kind: 'query',
             payload: AgentExecutionLocatorSchema,
-            result: AgentExecutionTerminalSnapshotSchema,
+            result: AgentExecutionTerminalSchema,
             execution: 'class'
         },
         resolveMessageShorthand: {
@@ -73,7 +73,7 @@ export const AgentExecutionContract: EntityContractType = {
         sendTerminalInput: {
             kind: 'mutation',
             payload: AgentExecutionSendTerminalInputSchema,
-            result: AgentExecutionTerminalSnapshotSchema,
+            result: AgentExecutionTerminalSchema,
             execution: 'class'
         }
     },
@@ -82,7 +82,7 @@ export const AgentExecutionContract: EntityContractType = {
             payload: AgentExecutionChangedSchema
         },
         terminal: {
-            payload: AgentExecutionTerminalSnapshotSchema
+            payload: AgentExecutionTerminalSchema
         }
     }
 };
@@ -94,7 +94,7 @@ export function createAgentExecutionTerminalEvent(input: {
 }): EntityEventEnvelopeType {
     const ownerId = input.ownerId.trim();
     const agentExecutionId = input.agentExecutionId.trim();
-    const payload = AgentExecutionTerminalSnapshotSchema.parse({
+    const payload = AgentExecutionTerminalSchema.parse({
         ownerId,
         agentExecutionId,
         ...(typeof input.state === 'object' && input.state !== null ? input.state : {})

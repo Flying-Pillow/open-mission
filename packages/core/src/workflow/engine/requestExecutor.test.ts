@@ -7,7 +7,7 @@ import {
 } from './document.js';
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
 import { WorkflowRequestExecutor } from './requestExecutor.js';
-import { FakeAgentAdapter } from '../../daemon/runtime/agent/testing/FakeAgentAdapter.js';
+import { FakeAgentAdapter } from '../../daemon/runtime/agent-execution/testing/FakeAgentAdapter.js';
 import { Agent } from '../../entities/Agent/Agent.js';
 import { AgentRegistry } from '../../entities/Agent/AgentRegistry.js';
 import type { WorkflowTaskRuntimeState, WorkflowRequest } from './types.js';

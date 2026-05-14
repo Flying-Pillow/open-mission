@@ -3,14 +3,23 @@ import { deriveAgentExecutionInteractionCapabilities } from '../protocol/AgentEx
 import { deriveAgentExecutionProtocolOwner } from '../protocol/AgentExecutionProtocolDescriptor.js';
 import { AgentExecution } from '../AgentExecution.js';
 import { AgentExecutionContract, createAgentExecutionDataChangedEvent } from '../AgentExecutionContract.js';
-import { AgentExecutionObservationPolicy } from '../runtime/AgentExecutionObservationPolicy.js';
+import { AgentExecutionObservationPolicy } from '../policy/AgentExecutionObservationPolicy.js';
 import { AgentExecutionSchema, AgentExecutionProtocolDescriptorSchema } from '../AgentExecutionSchema.js';
-import type { AgentExecutionType, AgentExecutionRecordType } from '../AgentExecutionSchema.js';
+import type { AgentExecutionType } from '../AgentExecutionSchema.js';
+import type { AgentExecutionProcess } from '../protocol/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionJournalRecordType } from '../journal/AgentExecutionJournalSchema.js';
 
 describe('AgentExecution', () => {
+    it('uses canonical Entity id as the class identity', () => {
+        const data = createAgentExecutionData();
+        const execution = new AgentExecution(data);
+
+        expect(execution.id).toBe(data.id);
+        expect(execution.agentExecutionId).toBe(data.agentExecutionId);
+    });
+
     it('materializes terminal identity through terminalHandle only', () => {
-        const data = AgentExecution.toDataFromRecord(createAgentExecutionRecord({
+        const data = AgentExecution.cloneData(createAgentExecutionData({
             terminalHandle: {
                 terminalName: 'mission-agent-execution',
                 terminalPaneId: 'terminal_1'
@@ -44,7 +53,7 @@ describe('AgentExecution', () => {
     });
 
     it('derives agent-message capabilities for non-terminals that accept semantic structured follow-up input', () => {
-        const snapshot: AgentExecutionType = {
+        const snapshot: AgentExecutionProcess = {
             agentId: 'codex',
             agentExecutionId: 'AgentExecution-2',
             scope: {
@@ -80,7 +89,7 @@ describe('AgentExecution', () => {
             updatedAt: '2026-05-04T00:00:00.000Z'
         };
 
-        const state = AgentExecution.createStateFromExecution({
+        const state = AgentExecution.createDataFromExecutionUpdate({
             execution: snapshot,
             adapterLabel: 'Codex'
         });
@@ -127,7 +136,7 @@ describe('AgentExecution', () => {
                 }
             }
         });
-        expect(data.projection.currentActivity).toBeUndefined();
+        expect(data.timeline.currentActivity).toBeUndefined();
     });
 
     it('surfaces awaiting-agent-response after an operator prompt until the agent replies', async () => {
@@ -144,7 +153,7 @@ describe('AgentExecution', () => {
 
         expect(execution.toData()).toMatchObject({
             activityState: 'awaiting-agent-response',
-            projection: {
+            timeline: {
                 currentActivity: {
                     activity: 'awaiting-agent-response'
                 }
@@ -162,7 +171,7 @@ describe('AgentExecution', () => {
 
         expect(execution.toData()).toMatchObject({
             activityState: 'executing',
-            projection: {
+            timeline: {
                 currentActivity: {
                     activity: 'executing'
                 }
@@ -176,6 +185,23 @@ describe('AgentExecution', () => {
             ownerId: 'mission-1',
             agentExecutionId: 'AgentExecution-1',
             agentId: 'codex',
+            process: createAgentExecutionProcess({
+                agentExecutionId: 'AgentExecution-1',
+                acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
+                acceptsPrompts: true,
+                transport: undefined,
+                interactionPosture: 'structured-headless',
+                interactionCapabilities: {
+                    mode: 'agent-message',
+                    canSendTerminalInput: false,
+                    canSendStructuredPrompt: true,
+                    canSendStructuredCommand: true
+                },
+                reference: {
+                    agentId: 'codex',
+                    agentExecutionId: 'AgentExecution-1'
+                }
+            }),
             adapterLabel: 'Codex',
             lifecycleState: 'running',
             currentInputRequestId: 'observation-1',
@@ -194,14 +220,10 @@ describe('AgentExecution', () => {
             },
             createdAt: '2026-05-09T00:00:00.000Z',
             lastUpdatedAt: '2026-05-09T00:00:00.000Z',
-            projection: { timelineItems: [] }
+            timeline: { timelineItems: [] }
         }));
 
-        const privateCtor = AgentExecution as unknown as {
-            applyDerivedInteractionState(data: AgentExecutionType): AgentExecutionType;
-        };
-
-        const hydrated = privateCtor.applyDerivedInteractionState(execution.toData());
+        const hydrated = AgentExecution.applyDerivedInteractionState(execution.toData());
 
         expect(hydrated.interactionCapabilities).toEqual({
             mode: 'agent-message',
@@ -219,7 +241,7 @@ describe('AgentExecution', () => {
     });
 
     it('rejects duplicate top-level terminal identity in AgentExecution data', () => {
-        const data = AgentExecution.toDataFromRecord(createAgentExecutionRecord({
+        const data = AgentExecution.cloneData(createAgentExecutionData({
             terminalHandle: {
                 terminalName: 'mission-agent-execution',
                 terminalPaneId: 'terminal_1'
@@ -234,7 +256,7 @@ describe('AgentExecution', () => {
     });
 
     it('materializes selected signal transport state', () => {
-        const data = AgentExecution.toDataFromRecord(createAgentExecutionRecord({
+        const data = AgentExecution.cloneData(createAgentExecutionData({
             transportState: {
                 selected: 'mcp-tool',
                 degraded: false
@@ -257,7 +279,7 @@ describe('AgentExecution', () => {
 
     it('treats a live task AgentExecution as incompatible when the requested agent changes', async () => {
         await expect(AgentExecution.isCompatibleForLaunch({
-            AgentExecution: createAgentExecutionRecord({ agentId: 'copilot-cli' }),
+            AgentExecution: createAgentExecutionData({ agentId: 'copilot-cli' }),
             request: {
                 agentId: 'codex',
                 taskId: 'task-1',
@@ -274,7 +296,7 @@ describe('AgentExecution', () => {
 
     it('keeps a live task AgentExecution compatible when task, agent, and working directory match', async () => {
         await expect(AgentExecution.isCompatibleForLaunch({
-            AgentExecution: createAgentExecutionRecord({ agentId: 'codex' }),
+            AgentExecution: createAgentExecutionData({ agentId: 'codex' }),
             request: {
                 agentId: 'codex',
                 taskId: 'task-1',
@@ -509,6 +531,53 @@ describe('AgentExecution', () => {
         });
     });
 
+    it('routes commands through the owner-agnostic AgentExecutionRegistry only', async () => {
+        const data = createAgentExecutionData();
+        const commands: unknown[] = [];
+        const execution = new AgentExecution(data);
+
+        await execution.command({
+            ownerId: data.ownerId,
+            agentExecutionId: data.agentExecutionId,
+            commandId: 'agentExecution.cancel',
+            input: { reason: 'operator cancelled' }
+        }, {
+            surfacePath: '/repo',
+            agentExecutionRegistry: {
+                hasExecution: () => true,
+                readExecution: () => data,
+                commandExecution: async (agentExecutionId: string, command: unknown) => {
+                    commands.push({ agentExecutionId, command });
+                    return data;
+                }
+            } as never
+        });
+
+        expect(commands).toEqual([{
+            agentExecutionId: data.agentExecutionId,
+            command: {
+                commandId: 'agentExecution.cancel',
+                input: { reason: 'operator cancelled' }
+            }
+        }]);
+    });
+
+    it('does not fall back to Mission when a registry execution is missing', async () => {
+        const data = createAgentExecutionData();
+        const execution = new AgentExecution(data);
+
+        await expect(execution.command({
+            ownerId: data.ownerId,
+            agentExecutionId: data.agentExecutionId,
+            commandId: 'agentExecution.cancel'
+        }, {
+            surfacePath: '/repo',
+            agentExecutionRegistry: {
+                hasExecution: () => false
+            } as never
+        })).rejects.toThrow(`AgentExecution '${data.agentExecutionId}' is not registered for owner '${data.ownerId}'.`);
+    });
+
     it('materializes accepted AgentExecution signals as timeline items', () => {
         const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const events: string[] = [];
@@ -546,7 +615,7 @@ describe('AgentExecution', () => {
         }
         const snapshot = execution.applySignalObservation(observation, decision);
 
-        expect(execution.toData().projection.timelineItems).toEqual([
+        expect(execution.toData().timeline.timelineItems).toEqual([
             expect.objectContaining({
                 id: 'observation-1',
                 primitive: 'attention.input-request',
@@ -603,7 +672,7 @@ describe('AgentExecution', () => {
 
         execution.applySignalObservation(observation, decision);
 
-        expect(execution.toData().projection.timelineItems).toEqual([
+        expect(execution.toData().timeline.timelineItems).toEqual([
             expect.objectContaining({
                 id: 'observation-progress-1',
                 primitive: 'activity.progress',
@@ -620,7 +689,7 @@ describe('AgentExecution', () => {
         ]);
     });
 
-    it('keeps artifact-bearing agent messages in the live timeline projection', () => {
+    it('keeps artifact-bearing agent messages in the live timeline timeline', () => {
         const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const observation = {
             observationId: 'observation-message-1',
@@ -661,7 +730,7 @@ describe('AgentExecution', () => {
 
         execution.applySignalObservation(observation, decision);
 
-        expect(execution.toData().projection.timelineItems).toEqual([
+        expect(execution.toData().timeline.timelineItems).toEqual([
             expect.objectContaining({
                 id: 'observation-message-1',
                 primitive: 'conversation.agent-message',
@@ -714,7 +783,7 @@ describe('AgentExecution', () => {
         }
         execution.applySignalObservation(observation, decision);
 
-        expect(execution.toData().projection.timelineItems).toEqual([
+        expect(execution.toData().timeline.timelineItems).toEqual([
             expect.objectContaining({
                 id: 'observation-status-1',
                 primitive: 'activity.status',
@@ -804,7 +873,7 @@ describe('AgentExecution', () => {
 
         execution.applySignalObservation(idleObservation, idleDecision);
 
-        expect(execution.toData().projection.currentAttention).toEqual(
+        expect(execution.toData().timeline.currentAttention).toEqual(
             expect.objectContaining({
                 state: 'awaiting-operator',
                 primitive: 'attention.input-request',
@@ -891,7 +960,7 @@ describe('AgentExecution', () => {
 
         execution.applySignalObservation(progressObservation, progressDecision);
 
-        expect(execution.toData().projection.currentAttention).toEqual(
+        expect(execution.toData().timeline.currentAttention).toEqual(
             expect.objectContaining({
                 state: 'awaiting-operator',
                 primitive: 'attention.input-request',
@@ -979,7 +1048,7 @@ describe('AgentExecution', () => {
 
         execution.applySignalObservation(reviewObservation, reviewDecision);
 
-        expect(execution.toData().projection.currentAttention).toEqual(
+        expect(execution.toData().timeline.currentAttention).toEqual(
             expect.objectContaining({
                 state: 'awaiting-operator',
                 primitive: 'attention.input-request',
@@ -1032,7 +1101,7 @@ describe('AgentExecution', () => {
         execution.applySignalObservation(observation, decision);
 
         expect(dataChanges).toHaveLength(1);
-        expect(dataChanges.at(0)?.projection.timelineItems).toEqual([
+        expect(dataChanges.at(0)?.timeline.timelineItems).toEqual([
             expect.objectContaining({
                 id: 'observation-ready-1',
                 primitive: 'attention.verification-requested',
@@ -1085,7 +1154,7 @@ describe('AgentExecution', () => {
             text: 'Use the default setup profile.'
         });
 
-        expect(execution.toData().projection.timelineItems).toEqual([
+        expect(execution.toData().timeline.timelineItems).toEqual([
             expect.objectContaining({
                 primitive: 'conversation.operator-message',
                 payload: expect.objectContaining({
@@ -1096,10 +1165,24 @@ describe('AgentExecution', () => {
     });
 });
 
-function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecordType> = {}): AgentExecutionRecordType {
-    return {
+function createAgentExecutionData(overrides: Partial<AgentExecutionType> = {}): AgentExecutionType {
+    const data = {
+        id: 'agent_execution:mission-1/AgentExecution-1',
+        ownerId: 'mission-1',
         agentExecutionId: 'AgentExecution-1',
         agentId: 'copilot-cli',
+        process: createAgentExecutionProcess({
+            agentId: 'copilot-cli',
+            agentExecutionId: 'AgentExecution-1',
+            scope: {
+                kind: 'task',
+                missionId: 'mission-1',
+                taskId: 'task-1'
+            },
+            taskId: 'task-1',
+            missionId: 'mission-1',
+            stageId: undefined
+        }),
         adapterLabel: 'Copilot CLI',
         lifecycleState: 'running',
         createdAt: '2026-05-02T00:00:00.000Z',
@@ -1125,9 +1208,14 @@ function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecordType>
         },
         ...overrides
     };
+    return AgentExecutionSchema.parse({
+        ...data,
+        context: data.context ?? AgentExecution.createContext(data),
+        timeline: data.timeline ?? { timelineItems: [] }
+    });
 }
 
-function createAgentExecutionProcess(overrides: Partial<AgentExecutionType> = {}): AgentExecutionType {
+function createAgentExecutionProcess(overrides: Partial<AgentExecutionProcess> = {}): AgentExecutionProcess {
     return {
         agentId: 'codex',
         agentExecutionId: 'AgentExecution-2',

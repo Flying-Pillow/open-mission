@@ -1,7 +1,7 @@
 import type { EntityContractType } from './EntitySchema.js';
 import { Entity, type EntityExecutionContext } from './Entity.js';
 import { MissionRegistry } from '../../daemon/MissionRegistry.js';
-import { getDefaultAgentExecutionRegistry } from '../../daemon/runtime/agent/AgentExecutionRegistry.js';
+import { getDefaultAgentExecutionRegistry } from '../../daemon/runtime/agent-execution/AgentExecutionRegistry.js';
 import { AgentContract } from '../Agent/AgentContract.js';
 import { AgentExecutionContract } from '../AgentExecution/AgentExecutionContract.js';
 import { ArtifactContract } from '../Artifact/ArtifactContract.js';

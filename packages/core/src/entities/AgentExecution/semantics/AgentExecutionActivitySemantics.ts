@@ -2,7 +2,7 @@ import type {
     AgentExecutionAttentionStateType,
     AgentExecutionActivityStateType,
     AgentExecutionLifecycleStateType,
-} from './AgentExecutionStateSchema.js';
+} from '../AgentExecutionStateSchema.js';
 import type {
     AgentExecutionStatusPhase,
     AgentProgressState

@@ -20,7 +20,7 @@
 
     type TimelineItem =
         AgentExecutionDataType["projection"]["timelineItems"][number];
-    type AttentionProjection =
+    type AttentionTimeline =
         AgentExecutionDataType["projection"]["currentAttention"];
     type AgentChatOwnerEntity = {
         agentExecution?: AgentExecutionEntity;
@@ -71,9 +71,9 @@
         refreshNonce;
         return resolvedAgentExecution?.currentActivity;
     });
-    const currentInputRequest = $derived.by<AttentionProjection>(() => {
+    const currentInputRequest = $derived.by<AttentionTimeline>(() => {
         refreshNonce;
-        const attention = resolvedAgentExecution?.projection.currentAttention;
+        const attention = resolvedAgentExecution?.timeline.currentAttention;
         if (
             attention?.primitive !== "attention.input-request" ||
             !attention.currentInputRequestId

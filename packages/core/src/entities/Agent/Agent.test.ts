@@ -2,14 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { Agent } from './Agent.js';
 import { AgentSchema } from './AgentSchema.js';
 import { AgentRegistry } from './AgentRegistry.js';
-import { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
+import { AgentAdapter } from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
 
 describe('Agent', () => {
     it('projects an Agent as the canonical hydrated Entity schema', async () => {
         const adapter = new AgentAdapter({
             id: 'projection-agent',
             command: process.execPath,
-            displayName: 'Projection Agent',
+            displayName: 'Timeline Agent',
             createLaunchPlan: () => ({
                 mode: 'print',
                 command: process.execPath,
@@ -26,7 +26,7 @@ describe('Agent', () => {
         })).toMatchObject({
             id: 'agent:projection-agent',
             agentId: 'projection-agent',
-            displayName: 'Projection Agent',
+            displayName: 'Timeline Agent',
             diagnostics: {
                 command: process.execPath,
                 supportsUsageParsing: false,

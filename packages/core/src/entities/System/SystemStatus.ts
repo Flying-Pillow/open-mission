@@ -8,7 +8,7 @@ import type {
     DaemonRuntimeOwnerReference,
     DaemonRuntimeSupervisionSnapshot
 } from '../../daemon/runtime/DaemonRuntimeSupervisionSchema.js';
-import type { AgentExecutionRuntimeSummary } from '../../daemon/runtime/agent/AgentExecutionRegistry.js';
+import type { AgentExecutionRuntimeSummary } from '../../daemon/runtime/agent-execution/AgentExecutionRegistry.js';
 import { systemConfigSchema, systemStateSchema, type RuntimeSystemState, type SystemConfig, type SystemState } from './SystemSchema.js';
 
 const GITHUB_CLI_TIMEOUT_MS = 1_500;

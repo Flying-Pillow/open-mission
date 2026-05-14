@@ -1,4 +1,4 @@
-import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
+import { AgentExecution } from '../../../../entities/AgentExecution/AgentExecution.js';
 import {
     deriveAgentExecutionInteractionCapabilities,
     describeAgentExecutionScope,
@@ -11,15 +11,15 @@ import {
     type AgentExecutionScope,
     type AgentPrompt,
     type AgentTaskContext
-} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
-import { Repository } from '../../../entities/Repository/Repository.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import { Repository } from '../../../../entities/Repository/Repository.js';
 import {
     TerminalRegistry,
     type TerminalHandle,
     type TerminalOwner,
     type TerminalSnapshot,
     type TerminalState
-} from '../../../entities/Terminal/TerminalRegistry.js';
+} from '../../../../entities/Terminal/TerminalRegistry.js';
 import type {
     AgentExecutionProcessDriver,
     AgentExecutionTerminalReconcileOptions,

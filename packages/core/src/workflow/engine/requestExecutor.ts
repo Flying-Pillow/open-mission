@@ -7,7 +7,7 @@ import {
 } from '../../entities/AgentExecution/AgentExecutionSchema.js';
 import { AgentIdSchema } from '../../entities/Agent/AgentSchema.js';
 import type { AgentRegistry } from '../../entities/Agent/AgentRegistry.js';
-import { AgentExecutor } from '../../daemon/runtime/agent/AgentExecutor.js';
+import { AgentExecutionCoordinator } from '../../daemon/runtime/agent-execution/AgentExecutionCoordinator.js';
 import type { AgentExecutionTerminalHandleType } from '../../entities/AgentExecution/AgentExecutionSchema.js';
 import { appendTaskContextArtifactReferences } from '../../entities/Task/taskLaunchPrompt.js';
 import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
@@ -79,13 +79,13 @@ export class WorkflowRequestExecutor {
 	private readonly defaultReasoningEffort: string | undefined;
 	private readonly defaultMode: AgentExecutionLaunchModeType | undefined;
 	private readonly workingDirectoryResolver: (task: WorkflowTaskRuntimeState, descriptor: MissionDescriptor) => string;
-	private readonly agentExecutor: AgentExecutor;
+	private readonly agentExecutionCoordinator: AgentExecutionCoordinator;
 
 	public constructor(private readonly options: WorkflowRequestExecutorOptions) {
 		this.defaultModel = options.defaultModel;
 		this.defaultReasoningEffort = options.defaultReasoningEffort;
 		this.defaultMode = options.defaultMode;
-		this.agentExecutor = new AgentExecutor({
+		this.agentExecutionCoordinator = new AgentExecutionCoordinator({
 			agentRegistry: options.agentRegistry,
 			...(options.logger ? { logger: options.logger } : {})
 		});
@@ -111,7 +111,7 @@ export class WorkflowRequestExecutor {
 			handle.subscription.dispose();
 		}
 		this.runtimeAgentExecutions.clear();
-		this.agentExecutor.dispose();
+		this.agentExecutionCoordinator.dispose();
 		this.runtimeListeners.clear();
 		this.runtimeEvents.length = 0;
 	}
@@ -370,7 +370,7 @@ export class WorkflowRequestExecutor {
 	}
 
 	public async startExecution(config: AgentLaunchConfig): Promise<AgentExecutionType> {
-		const execution = await this.agentExecutor.startExecution(config);
+		const execution = await this.agentExecutionCoordinator.startExecution(config);
 		return this.registerExecution(execution);
 	}
 
@@ -390,7 +390,7 @@ export class WorkflowRequestExecutor {
 		if (existing) {
 			return existing.execution.getExecution();
 		}
-		const execution = await this.agentExecutor.reconcileExecution(reference);
+		const execution = await this.agentExecutionCoordinator.reconcileExecution(reference);
 		return this.registerExecution(execution);
 	}
 
@@ -426,7 +426,7 @@ export class WorkflowRequestExecutor {
 	): Promise<WorkflowEvent[]> {
 		this.rememberAgentExecutionTaskId(agentExecutionId, fallbackTaskId);
 		this.requireRuntimeAgentExecution(agentExecutionId);
-		const snapshot = await this.agentExecutor.cancelExecution(agentExecutionId, reason);
+		const snapshot = await this.agentExecutionCoordinator.cancelExecution(agentExecutionId, reason);
 		const events = this.drainRuntimeEvents();
 		if (events.length > 0) {
 			return events;
@@ -436,7 +436,7 @@ export class WorkflowRequestExecutor {
 
 	public async promptRuntimeAgentExecution(agentExecutionId: AgentExecutionId, prompt: AgentPrompt): Promise<WorkflowEvent[]> {
 		this.requireRuntimeAgentExecution(agentExecutionId);
-		await this.agentExecutor.submitPrompt(agentExecutionId, prompt);
+		await this.agentExecutionCoordinator.submitPrompt(agentExecutionId, prompt);
 		return this.drainRuntimeEvents();
 	}
 
@@ -446,7 +446,7 @@ export class WorkflowRequestExecutor {
 	): Promise<WorkflowEvent[]> {
 		this.rememberAgentExecutionTaskId(agentExecutionId, fallbackTaskId);
 		this.requireRuntimeAgentExecution(agentExecutionId);
-		const snapshot = await this.agentExecutor.completeExecution(agentExecutionId);
+		const snapshot = await this.agentExecutionCoordinator.completeExecution(agentExecutionId);
 		const events = this.drainRuntimeEvents();
 		if (events.length > 0) {
 			return events;
@@ -456,7 +456,7 @@ export class WorkflowRequestExecutor {
 
 	public async commandRuntimeAgentExecution(agentExecutionId: AgentExecutionId, command: AgentCommand): Promise<WorkflowEvent[]> {
 		this.requireRuntimeAgentExecution(agentExecutionId);
-		await this.agentExecutor.submitCommand(agentExecutionId, command);
+		await this.agentExecutionCoordinator.submitCommand(agentExecutionId, command);
 		return this.drainRuntimeEvents();
 	}
 
@@ -470,7 +470,7 @@ export class WorkflowRequestExecutor {
 		if (!runtimeAgentExecution) {
 			return [];
 		}
-		const snapshot = await this.agentExecutor.terminateExecution(agentExecutionId, reason);
+		const snapshot = await this.agentExecutionCoordinator.terminateExecution(agentExecutionId, reason);
 		const events = this.drainRuntimeEvents();
 		if (events.length > 0) {
 			return events;

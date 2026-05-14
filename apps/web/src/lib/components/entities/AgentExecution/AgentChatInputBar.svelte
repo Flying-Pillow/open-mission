@@ -5,10 +5,10 @@
     import { Textarea } from "$lib/components/ui/textarea/index.js";
     import type { AgentExecutionDataType } from "@flying-pillow/open-mission-core/entities/AgentExecution/AgentExecutionSchema";
 
-    type AttentionProjection =
+    type AttentionTimeline =
         AgentExecutionDataType["projection"]["currentAttention"];
     type InputChoice = NonNullable<
-        NonNullable<AttentionProjection>["choices"]
+        NonNullable<AttentionTimeline>["choices"]
     >[number];
 
     let {
@@ -23,7 +23,7 @@
     }: {
         value: string;
         placeholder: string;
-        activeInputRequest?: AttentionProjection;
+        activeInputRequest?: AttentionTimeline;
         disabled?: boolean;
         pending?: boolean;
         error?: string | null;

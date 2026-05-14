@@ -34,7 +34,7 @@ import type {
     AgentExecutionSignalDecision,
     AgentPrompt
 } from '../protocol/AgentExecutionProtocolTypes.js';
-import { deriveActivityStateFromProgressState } from '../state/AgentExecutionActivitySemantics.js';
+import { deriveActivityStateFromProgressState } from '../semantics/AgentExecutionActivitySemantics.js';
 
 export type AgentExecutionJournalLaunchInput = {
     agentExecutionId: string;

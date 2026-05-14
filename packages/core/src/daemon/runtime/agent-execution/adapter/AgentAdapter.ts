@@ -1,18 +1,18 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { AgentInput as CoreAgentInput } from '../../../entities/Agent/AgentSchema.js';
-import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
-import type { SharedTerminalRegistryOptions } from '../../../entities/Terminal/TerminalRegistry.js';
+import type { AgentInput as CoreAgentInput } from '../../../../entities/Agent/AgentSchema.js';
+import { AgentExecution } from '../../../../entities/AgentExecution/AgentExecution.js';
+import type { SharedTerminalRegistryOptions } from '../../../../entities/Terminal/TerminalRegistry.js';
 import type {
     AgentCapabilities,
     AgentLaunchConfig,
     AgentMetadata
-} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
-import type { AgentSignalDeliveryType } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import type { AgentSignalDeliveryType } from '../../../../entities/AgentExecution/AgentExecutionSchema.js';
 import {
     AgentExecutionMessageDescriptorSchema,
     type AgentExecutionMessageDescriptorType
-} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolSchema.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolSchema.js';
 
 export type AgentAdapterTransportCapabilities = {
     supported: AgentSignalDeliveryType[];

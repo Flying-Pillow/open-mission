@@ -24,7 +24,7 @@ import {
 	getDefaultEntityFactory,
 	type EntityFactory
 } from './EntityFactory.js';
-import type { AgentExecutionRegistry } from '../../daemon/runtime/agent/AgentExecutionRegistry.js';
+import type { AgentExecutionRegistry } from '../../daemon/runtime/agent-execution/AgentExecutionRegistry.js';
 
 export type {
 	EntityChannelType,

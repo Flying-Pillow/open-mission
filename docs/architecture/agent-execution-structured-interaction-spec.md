@@ -8,9 +8,9 @@ description: Temporary working spec for owner-addressed Agent execution messages
 
 ## Temporary Agent Execution Structured Interaction Spec
 
-> Current authority: this temporary spec contains pre-convergence runtime and AgentExecutor wording. Where it conflicts with `CONTEXT.md`, ADR-0004.01, ADR-0004.05, ADR-0004.06, or ADR-0004.10 as updated on 2026-05-13, follow the newer rule: `AgentExecution` is the canonical in-memory Entity instance and owner of the Agent execution process; MCP/stdout/provider output are input channels; `Terminal` is optional transport; `AgentExecutor` is not canonical ownership vocabulary.
+> Current authority: this temporary spec contains pre-convergence runtime and AgentExecutor wording. Where it conflicts with `CONTEXT.md`, ADR-0006.01, ADR-0006.05, ADR-0006.06, or ADR-0006.10 as updated on 2026-05-13, follow the newer rule: `AgentExecution` is the canonical in-memory Entity instance and owner of the Agent execution process; MCP/stdout/provider output are input channels; `Terminal` is optional transport; `AgentExecutor` is not canonical ownership vocabulary.
 
-This is the umbrella working implementation spec for the Agent execution structured interaction architecture described by ADR-0004.05 and extended by ADR-0004.06.
+This is the umbrella working implementation spec for the Agent execution structured interaction architecture described by ADR-0006.05 and extended by ADR-0006.06.
 
 It is temporary on purpose. It exists so future implementation sessions can continue from the same clean-sheet model. When the implementation converges, fold the durable parts into `CONTEXT.md`, accepted ADRs, and permanent architecture pages, then delete this file.
 
@@ -18,7 +18,7 @@ It is temporary on purpose. It exists so future implementation sessions can cont
 
 The task is to implement a clear architecture for how an Agent execution communicates with Mission through the Entity that owns its scope. The current `@mission::` marker path is useful source material for parser behavior, validation, and tests.
 
-The current code is useful evidence. It has parsers, policy checks, terminal observation, runtime messages, AgentExecution snapshots, and workflow integration. It is not authoritative where it conflicts with ADR-0004.05 or the OOD Entity model. Any current module that keeps AgentExecutor as the semantic owner of Task, Mission, Repository, or Artifact meaning is implementation material to reshape, not architecture to preserve.
+The current code is useful evidence. It has parsers, policy checks, terminal observation, runtime messages, AgentExecution snapshots, and workflow integration. It is not authoritative where it conflicts with ADR-0006.05 or the OOD Entity model. Any current module that keeps AgentExecutor as the semantic owner of Task, Mission, Repository, or Artifact meaning is implementation material to reshape, not architecture to preserve.
 
 The desired architecture is an Entity-addressed runtime conversation:
 
@@ -38,10 +38,10 @@ The implementation must make the available structured interaction inspectable be
 - `CONTEXT.md`: canonical Mission language.
 - ADR-0001.03: Entity classes own behavior.
 - ADR-0001.05: Entity commands are the canonical operator mutation surface.
-- ADR-0004.04: prompt-scoped Agent execution signals are the current transport baseline.
-- ADR-0004.01: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
-- ADR-0004.05: structured Agent execution interaction vocabulary and owner-addressed signal model.
-- ADR-0004.06: `open-mission-mcp` is the daemon-owned MCP signal transport for Agent signals.
+- ADR-0006.04: prompt-scoped Agent execution signals are the current transport baseline.
+- ADR-0006.01: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
+- ADR-0006.05: structured Agent execution interaction vocabulary and owner-addressed signal model.
+- ADR-0006.06: `open-mission-mcp` is the daemon-owned MCP signal transport for Agent signals.
 - Mission MCP Server Spec: subordinate realization blueprint for the MCP transport. It must not redefine descriptor, observation, owner-routing, or idempotency semantics independently of this spec.
 
 ## Vocabulary To Implement
@@ -113,7 +113,7 @@ An Entity event is an accepted daemon-published fact. Agent stdout becomes an En
 The first implementation pass exposed three architecture smells that must not be carried forward:
 
 - Marker prefixes were duplicated in daemon runtime code even though `AgentExecutionOwnerMarkerPrefixSchema` already owns the enum.
-- Runtime signal modules introduced terms such as `protocol-marker`, parser defaults, and signal decisions that were not part of ADR-0004.05 vocabulary.
+- Runtime signal modules introduced terms such as `protocol-marker`, parser defaults, and signal decisions that were not part of ADR-0006.05 vocabulary.
 - The daemon `signals` folder mixed transport observation, payload parsing, policy evaluation, prompt rendering, and semantic state mutation in a way that obscured which behavior belongs to AgentExecution and which belongs to the owning Entity.
 
 Correction rule: the daemon may normalize output into observations, but it must not define owner prefixes, default an owner prefix, or become the semantic owner of scoped Mission, Task, Repository, or Artifact meaning.

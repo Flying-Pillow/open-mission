@@ -1,11 +1,11 @@
 import {
-    AgentExecutionProjectionSchema,
+    AgentExecutionTimelineSchema,
     AgentExecutionTimelineItemSchema,
-    type AgentExecutionAttentionProjectionType,
-    type AgentExecutionActivityProjectionType,
-    type AgentExecutionProjectionType,
+    type AgentExecutionTimelineAttentionType,
+    type AgentExecutionTimelineActivityType,
+    type AgentExecutionTimelineType,
     type AgentExecutionTimelineItemType
-} from '../state/AgentExecutionProjectionSchema.js';
+} from '../timeline/AgentExecutionTimelineSchema.js';
 import {
     type AgentExecutionActivityStateType,
     type AgentExecutionAttentionStateType,
@@ -13,7 +13,7 @@ import {
     type AgentExecutionLiveActivityType,
     type AgentExecutionTelemetryType,
     type AgentExecutionTransportStateType
-} from '../state/AgentExecutionStateSchema.js';
+} from '../AgentExecutionStateSchema.js';
 import type { AgentExecutionProtocolDescriptorType } from '../protocol/AgentExecutionProtocolSchema.js';
 import type { AgentExecutionType } from '../AgentExecutionSchema.js';
 import type {
@@ -26,7 +26,7 @@ import type {
 import { projectAgentExecutionObservationSignalToTimelineItem } from '../protocol/AgentExecutionSignalRegistry.js';
 
 export type AgentExecutionJournalReplayState = {
-    projection: AgentExecutionProjectionType;
+    timeline: AgentExecutionTimelineType;
     processedMessageIds: Set<string>;
     processedObservationIds: Set<string>;
     lifecycleState?: AgentExecutionLifecycleStateType;
@@ -94,8 +94,8 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
             case 'owner-effect.recorded':
                 appendUniqueTimelineItem(timelineItems, toTimelineItemFromOwnerEffectRecord(record));
                 break;
-            case 'projection.recorded':
-                appendUniqueTimelineItem(timelineItems, toTimelineItemFromProjectionRecord(record));
+            case 'timeline.recorded':
+                appendUniqueTimelineItem(timelineItems, toTimelineItemFromTimelineRecord(record));
                 break;
             default:
                 break;
@@ -108,11 +108,11 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
         activityState,
     });
 
-    const projection = AgentExecutionProjectionSchema.parse({
+    const timeline = AgentExecutionTimelineSchema.parse({
         timelineItems,
         ...(liveActivity || lifecycleState || attention || derivedActivityState || telemetry
             ? {
-                currentActivity: createCurrentActivityProjection({
+                currentActivity: createCurrentActivityTimeline({
                     lifecycleState,
                     attention,
                     activityState: derivedActivityState,
@@ -124,7 +124,7 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
             : {}),
         ...(attention && lastOccurredAt
             ? {
-                currentAttention: createCurrentAttentionProjection({
+                currentAttention: createCurrentAttentionTimeline({
                     attention,
                     currentInputRequestId,
                     timelineItems,
@@ -135,7 +135,7 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
     });
 
     return {
-        projection,
+        timeline,
         processedMessageIds,
         processedObservationIds,
         ...(lifecycleState ? { lifecycleState } : {}),
@@ -165,9 +165,9 @@ export function hydrateAgentExecutionDataFromJournal(
         activityState: replay.activityState ?? data.activityState,
     });
     const liveActivity = replay.liveActivity ?? data.liveActivity;
-    const projection = AgentExecutionProjectionSchema.parse({
-        ...replay.projection,
-        ...(createCurrentActivityProjection({
+    const timeline = AgentExecutionTimelineSchema.parse({
+        ...replay.timeline,
+        ...(createCurrentActivityTimeline({
             lifecycleState,
             attention,
             activityState,
@@ -176,7 +176,7 @@ export function hydrateAgentExecutionDataFromJournal(
             lastOccurredAt: replay.lastOccurredAt ?? data.lastUpdatedAt
         })
             ? {
-                currentActivity: createCurrentActivityProjection({
+                currentActivity: createCurrentActivityTimeline({
                     lifecycleState,
                     attention,
                     activityState,
@@ -190,7 +190,7 @@ export function hydrateAgentExecutionDataFromJournal(
     return {
         ...data,
         journalRecords: structuredClone(records),
-        projection,
+        timeline,
         ...(replay.lifecycleState ? { lifecycleState: replay.lifecycleState } : {}),
         ...(replay.attention ? { attention: replay.attention } : {}),
         ...(activityState ? { activityState } : {}),
@@ -377,10 +377,10 @@ function toTimelineItemFromOwnerEffectRecord(
     });
 }
 
-function toTimelineItemFromProjectionRecord(
-    record: Extract<AgentExecutionJournalRecordType, { type: 'projection.recorded' }>
+function toTimelineItemFromTimelineRecord(
+    record: Extract<AgentExecutionJournalRecordType, { type: 'timeline.recorded' }>
 ): AgentExecutionTimelineItemType | undefined {
-    if (record.projection !== 'timeline-item') {
+    if (record.timeline !== 'timeline-item') {
         return undefined;
     }
     return AgentExecutionTimelineItemSchema.parse(record.payload);
@@ -420,14 +420,14 @@ function createBehavior(
     };
 }
 
-function createCurrentActivityProjection(input: {
+function createCurrentActivityTimeline(input: {
     lifecycleState: AgentExecutionLifecycleStateType | undefined;
     attention: AgentExecutionAttentionStateType | undefined;
     activityState: AgentExecutionActivityStateType | undefined;
     liveActivity: AgentExecutionLiveActivityType | undefined;
     telemetry: AgentExecutionTelemetryType | undefined;
     lastOccurredAt: string | undefined;
-}): AgentExecutionActivityProjectionType | undefined {
+}): AgentExecutionTimelineActivityType | undefined {
     const updatedAt = input.liveActivity?.updatedAt ?? input.telemetry?.updatedAt ?? input.lastOccurredAt;
     if (!updatedAt) {
         return undefined;
@@ -462,16 +462,16 @@ function deriveActivityState(input: {
     return baseActivity;
 }
 
-function createCurrentAttentionProjection(input: {
+function createCurrentAttentionTimeline(input: {
     attention: AgentExecutionAttentionStateType;
     currentInputRequestId: string | null | undefined;
     timelineItems: AgentExecutionTimelineItemType[];
     lastOccurredAt: string;
-}): AgentExecutionAttentionProjectionType | undefined {
+}): AgentExecutionTimelineAttentionType | undefined {
     if (input.attention === 'none' || input.attention === 'autonomous') {
         return undefined;
     }
-    const attentionItem = resolveCurrentAttentionProjectionItem(input.timelineItems, input.currentInputRequestId);
+    const attentionItem = resolveCurrentAttentionTimelineItem(input.timelineItems, input.currentInputRequestId);
     const primitive = attentionItem?.primitive;
     if (
         primitive !== 'attention.input-request'
@@ -499,7 +499,7 @@ function createCurrentAttentionProjection(input: {
     };
 }
 
-function resolveCurrentAttentionProjectionItem(
+function resolveCurrentAttentionTimelineItem(
     timelineItems: AgentExecutionTimelineItemType[],
     currentInputRequestId: string | null | undefined
 ): AgentExecutionTimelineItemType | undefined {

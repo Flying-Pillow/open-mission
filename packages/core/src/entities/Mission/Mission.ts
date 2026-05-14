@@ -2,7 +2,7 @@ import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/E
 import {
 	AgentRuntimeEventEmitter,
 	type AgentRuntimeDisposable
-} from '../../daemon/runtime/agent/events.js';
+} from '../../daemon/runtime/agent-execution/events.js';
 import type { EntityCommandDescriptorType } from '../Entity/EntitySchema.js';
 import {
 	type MissionCommandAcknowledgementType,
@@ -16,11 +16,11 @@ import type {
 import type {
 	AgentExecutionConsoleEventType,
 	AgentExecutionConsoleStateType,
-	AgentExecutionOwnerEventType,
+	AgentExecutionEventType,
 	AgentExecutionLifecycleStateType,
-	AgentExecutionLaunchRequestType,
-	AgentExecutionRecordType
+	AgentExecutionLaunchRequestType
 } from '../AgentExecution/AgentExecutionSchema.js';
+import { AgentExecutionCommandIds } from '../AgentExecution/AgentExecutionSchema.js';
 import type {
 	AgentCommand,
 	AgentPrompt
@@ -49,7 +49,7 @@ import {
 	type WorkflowTaskArtifactReference,
 	type WorkflowDefinition
 } from '../../workflow/engine/index.js';
-import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
+import type { AgentAdapter } from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
 import type {
 	AgentExecutionEvent,
 	AgentExecutionType,
@@ -118,7 +118,7 @@ type MissionStatusSnapshot = {
 	missionDir?: string;
 	missionRootDir?: string;
 	productFiles?: Record<string, string>;
-	agentExecutions?: AgentExecutionRecordType[];
+	agentExecutions?: AgentExecutionType[];
 	recommendedAction?: string;
 };
 
@@ -335,11 +335,11 @@ export class Mission extends Entity<MissionStorageType, string> {
 	}
 
 	private readonly agentConsoleEventEmitter = new AgentRuntimeEventEmitter<AgentExecutionConsoleEventType>();
-	private readonly agentEventEmitter = new AgentRuntimeEventEmitter<AgentExecutionOwnerEventType>();
+	private readonly agentEventEmitter = new AgentRuntimeEventEmitter<AgentExecutionEventType>();
 	private readonly agentRegistry: AgentRegistry;
 	private readonly consoleStates = new Map<string, AgentExecutionConsoleStateType>();
 	private descriptor: MissionDossierDescriptor;
-	private agentExecutionRecords: AgentExecutionRecordType[] = [];
+	private agentExecutionData: AgentExecutionType[] = [];
 	private lastKnownStatus: MissionStatusSnapshot | undefined;
 	private lastKnownCommands: EntityCommandDescriptorType[] | undefined;
 	private readonly workflowRequestExecutor: WorkflowRequestExecutor;
@@ -649,22 +649,22 @@ export class Mission extends Entity<MissionStorageType, string> {
 		return this.lastKnownStatus;
 	}
 
-	public getAgentExecutions(): AgentExecutionRecordType[] {
-		return this.agentExecutionRecords.map((record) => AgentExecution.cloneRecord(record));
+	public getAgentExecutions(): AgentExecutionType[] {
+		return this.agentExecutionData.map((execution) => AgentExecution.cloneData(execution));
 	}
 
-	public getAgentExecution(agentExecutionId: string): AgentExecutionRecordType | undefined {
-		const record = this.agentExecutionRecords.find((candidate) => candidate.agentExecutionId === agentExecutionId);
-		return record ? AgentExecution.cloneRecord(record) : undefined;
+	public getAgentExecution(agentExecutionId: string): AgentExecutionType | undefined {
+		const execution = this.agentExecutionData.find((candidate) => candidate.agentExecutionId === agentExecutionId);
+		return execution ? AgentExecution.cloneData(execution) : undefined;
 	}
 
 	public getAgentExecutionByTerminalName(
 		terminalName: string,
-	): AgentExecutionRecordType | undefined {
-		const record = this.agentExecutionRecords.find(
+	): AgentExecutionType | undefined {
+		const execution = this.agentExecutionData.find(
 			(candidate) => candidate.terminalHandle?.terminalName === terminalName,
 		);
-		return record ? AgentExecution.cloneRecord(record) : undefined;
+		return execution ? AgentExecution.cloneData(execution) : undefined;
 	}
 
 	public getAgentConsoleState(agentExecutionId: string): AgentExecutionConsoleStateType | undefined {
@@ -674,7 +674,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 
 	public async launchAgentExecution(
 		request: AgentExecutionLaunchRequestType
-	): Promise<AgentExecutionRecordType> {
+	): Promise<AgentExecutionType> {
 		if (!request.taskId) {
 			throw new Error('Mission task agentExecutions require an explicit taskId.');
 		}
@@ -691,7 +691,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 				await this.terminateAgentExecution(existingAgentExecution.agentExecutionId, 'replaced stale task AgentExecution before relaunch');
 				await this.readStatusView();
 			} else {
-				return AgentExecution.cloneRecord(existingAgentExecution);
+				return AgentExecution.cloneData(existingAgentExecution);
 			}
 		}
 
@@ -704,41 +704,41 @@ export class Mission extends Entity<MissionStorageType, string> {
 			task = await this.requireTask(request.taskId);
 		}
 		const execution = await task.launchAgentExecution(request);
-		return execution.toRecord();
+		return execution.toEntity();
 	}
 
 	public async cancelAgentExecution(
 		agentExecutionId: string,
 		reason?: string
-	): Promise<AgentExecutionRecordType> {
-		return this.cancelAgentExecutionRecord(agentExecutionId, reason);
+	): Promise<AgentExecutionType> {
+		return this.cancelAgentExecutionData(agentExecutionId, reason);
 	}
 
 	public async sendAgentExecutionPrompt(
 		agentExecutionId: string,
 		prompt: AgentPrompt
-	): Promise<AgentExecutionRecordType> {
-		return this.sendAgentExecutionPromptRecord(agentExecutionId, prompt);
+	): Promise<AgentExecutionType> {
+		return this.sendAgentExecutionPromptData(agentExecutionId, prompt);
 	}
 
 	public async sendAgentExecutionCommand(
 		agentExecutionId: string,
 		command: AgentCommand
-	): Promise<AgentExecutionRecordType> {
-		return this.sendAgentExecutionCommandRecord(agentExecutionId, command);
+	): Promise<AgentExecutionType> {
+		return this.sendAgentExecutionCommandData(agentExecutionId, command);
 	}
 
 	public async completeAgentExecution(
 		agentExecutionId: string
-	): Promise<AgentExecutionRecordType> {
-		return this.completeAgentExecutionRecord(agentExecutionId);
+	): Promise<AgentExecutionType> {
+		return this.completeAgentExecutionData(agentExecutionId);
 	}
 
 	public async terminateAgentExecution(
 		agentExecutionId: string,
 		reason?: string
-	): Promise<AgentExecutionRecordType> {
-		return this.terminateAgentExecutionRecord(agentExecutionId, reason);
+	): Promise<AgentExecutionType> {
+		return this.terminateAgentExecutionData(agentExecutionId, reason);
 	}
 
 	public dispose(): void {
@@ -762,7 +762,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 		return this.workflowController.applyRuntimeAgentExecutionSignalDecision(agentExecutionId, decision);
 	}
 
-	private async resolveLiveAgentExecution(execution: AgentExecutionRecordType): Promise<AgentExecutionType | undefined> {
+	private async resolveLiveAgentExecution(execution: AgentExecutionType): Promise<AgentExecutionType | undefined> {
 		return this.workflowController.getRuntimeAgentExecution(execution.agentExecutionId)
 			?? await this.workflowController.attachRuntimeAgentExecution({
 				agentId: execution.agentId,
@@ -952,7 +952,42 @@ export class Mission extends Entity<MissionStorageType, string> {
 
 	private async buildCommandList(): Promise<EntityCommandDescriptorType[]> {
 		const { MissionContract } = await import('./MissionContract.js');
-		return this.commandDescriptors(MissionContract, this.createCommandDescriptorContext());
+		const commands = await this.commandDescriptors(MissionContract, this.createCommandDescriptorContext());
+		if (!this.lastKnownStatus) {
+			return commands;
+		}
+
+		const entity = Mission.createDataFromStatus(this.lastKnownStatus);
+		const stages = await this.buildHydratedStagesWithCommands(entity.stages, this.lastKnownStatus);
+		return [
+			...commands,
+			...stages.flatMap((stage) => [
+				...(stage.commands ?? []),
+				...stage.tasks.flatMap((task) => task.commands ?? [])
+			]),
+			...this.buildAgentExecutionCommandList()
+		];
+	}
+
+	private buildAgentExecutionCommandList(): EntityCommandDescriptorType[] {
+		return this.agentExecutionData
+			.filter((execution) => Mission.isActiveAgentExecution(execution.lifecycleState))
+			.map((execution) => ({
+				commandId: AgentExecutionCommandIds.cancel,
+				entity: 'AgentExecution',
+				method: 'command',
+				targetId: createEntityId('agent_execution', `${execution.ownerId}/${execution.agentExecutionId}`),
+				label: 'Stop agent',
+				available: true,
+				variant: 'destructive',
+				icon: 'square',
+				tone: 'danger',
+				confirmation: {
+					required: true,
+					prompt: 'Stop this agent execution?'
+				},
+				presentationOrder: 50
+			} satisfies EntityCommandDescriptorType));
 	}
 
 	private createWorkflowEvent(
@@ -1074,8 +1109,8 @@ export class Mission extends Entity<MissionStorageType, string> {
 		return this.createTask(task);
 	}
 
-	private findActiveTaskAgentExecution(taskId: string): AgentExecutionRecordType | undefined {
-		return this.agentExecutionRecords.find(
+	private findActiveTaskAgentExecution(taskId: string): AgentExecutionType | undefined {
+		return this.agentExecutionData.find(
 			(candidate) => candidate.taskId === taskId && Mission.isActiveAgentExecution(candidate.lifecycleState)
 		);
 	}
@@ -1184,79 +1219,79 @@ export class Mission extends Entity<MissionStorageType, string> {
 		await this.refresh();
 	}
 
-	private requireAgentExecutionRecord(agentExecutionId: string): AgentExecutionRecordType {
-		const record = this.agentExecutionRecords.find((candidate) => candidate.agentExecutionId === agentExecutionId);
-		if (!record) {
+	private requireAgentExecutionData(agentExecutionId: string): AgentExecutionType {
+		const execution = this.agentExecutionData.find((candidate) => candidate.agentExecutionId === agentExecutionId);
+		if (!execution) {
 			throw new Error(`Mission agent execution '${agentExecutionId}' is not recorded in mission state.`);
 		}
-		return AgentExecution.cloneRecord(record);
+		return AgentExecution.cloneData(execution);
 	}
 
 	private requireAgentExecution(agentExecutionId: string): AgentExecution {
-		return new AgentExecution(AgentExecution.toDataFromRecord(this.requireAgentExecutionRecord(agentExecutionId)));
+		return new AgentExecution(this.requireAgentExecutionData(agentExecutionId));
 	}
 
-	private async cancelAgentExecutionRecord(
+	private async cancelAgentExecutionData(
 		agentExecutionId: string,
 		reason?: string
-	): Promise<AgentExecutionRecordType> {
-		const record = this.requireAgentExecutionRecord(agentExecutionId);
+	): Promise<AgentExecutionType> {
+		const execution = this.requireAgentExecutionData(agentExecutionId);
 		await this.ensureAgentExecutionAttached(agentExecutionId);
-		const document = await this.workflowController.cancelProcessAgentExecution(agentExecutionId, reason, record.taskId);
-		await this.ensureAgentExecutionLifecycleRecorded(document, record, 'cancelled');
+		const document = await this.workflowController.cancelProcessAgentExecution(agentExecutionId, reason, execution.taskId);
+		await this.ensureAgentExecutionLifecycleData(document, execution, 'cancelled');
 		await this.refresh();
-		return this.requireAgentExecutionRecord(agentExecutionId);
+		return this.requireAgentExecutionData(agentExecutionId);
 	}
 
-	private async sendAgentExecutionPromptRecord(
+	private async sendAgentExecutionPromptData(
 		agentExecutionId: string,
 		prompt: AgentPrompt
-	): Promise<AgentExecutionRecordType> {
+	): Promise<AgentExecutionType> {
 		await this.ensureAgentExecutionAttached(agentExecutionId);
 		await this.workflowController.promptRuntimeAgentExecution(agentExecutionId, prompt);
 		await this.refresh();
-		return this.requireAgentExecutionRecord(agentExecutionId);
+		return this.requireAgentExecutionData(agentExecutionId);
 	}
 
-	private async sendAgentExecutionCommandRecord(
+	private async sendAgentExecutionCommandData(
 		agentExecutionId: string,
 		command: AgentCommand
-	): Promise<AgentExecutionRecordType> {
+	): Promise<AgentExecutionType> {
 		await this.ensureAgentExecutionAttached(agentExecutionId);
 		await this.workflowController.commandRuntimeAgentExecution(agentExecutionId, command);
 		await this.refresh();
-		return this.requireAgentExecutionRecord(agentExecutionId);
+		return this.requireAgentExecutionData(agentExecutionId);
 	}
 
-	private async completeAgentExecutionRecord(
+	private async completeAgentExecutionData(
 		agentExecutionId: string
-	): Promise<AgentExecutionRecordType> {
-		const record = this.requireAgentExecutionRecord(agentExecutionId);
+	): Promise<AgentExecutionType> {
+		const execution = this.requireAgentExecutionData(agentExecutionId);
 		await this.ensureAgentExecutionAttached(agentExecutionId);
-		await this.workflowController.completeRuntimeAgentExecution(agentExecutionId, record.taskId);
+		await this.workflowController.completeRuntimeAgentExecution(agentExecutionId, execution.taskId);
 		await this.refresh();
-		return this.requireAgentExecutionRecord(agentExecutionId);
+		return this.requireAgentExecutionData(agentExecutionId);
 	}
 
-	private async terminateAgentExecutionRecord(
+	private async terminateAgentExecutionData(
 		agentExecutionId: string,
 		reason?: string
-	): Promise<AgentExecutionRecordType> {
-		const record = this.requireAgentExecutionRecord(agentExecutionId);
+	): Promise<AgentExecutionType> {
+		const execution = this.requireAgentExecutionData(agentExecutionId);
 		await this.ensureAgentExecutionAttached(agentExecutionId);
-		const document = await this.workflowController.terminateProcessAgentExecution(agentExecutionId, reason, record.taskId);
-		await this.ensureAgentExecutionLifecycleRecorded(document, record, 'terminated');
+		const document = await this.workflowController.terminateProcessAgentExecution(agentExecutionId, reason, execution.taskId);
+		await this.ensureAgentExecutionLifecycleData(document, execution, 'terminated');
 		await this.refresh();
-		return this.requireAgentExecutionRecord(agentExecutionId);
+		return this.requireAgentExecutionData(agentExecutionId);
 	}
 
-	private async ensureAgentExecutionLifecycleRecorded(
+	private async ensureAgentExecutionLifecycleData(
 		document: WorkflowStateData,
-		record: AgentExecutionRecordType,
+		execution: AgentExecutionType,
 		lifecycle: 'cancelled' | 'terminated'
 	): Promise<void> {
 		const persistedAgentExecution = document.runtime.agentExecutions.find(
-			(candidate) => candidate.agentExecutionId === record.agentExecutionId,
+			(candidate) => candidate.agentExecutionId === execution.agentExecutionId,
 		);
 		if (persistedAgentExecution?.lifecycle === lifecycle) {
 			return;
@@ -1266,8 +1301,8 @@ export class Mission extends Entity<MissionStorageType, string> {
 			this.createWorkflowEvent(
 				eventType,
 				{
-					agentExecutionId: record.agentExecutionId,
-					taskId: record.taskId,
+					agentExecutionId: execution.agentExecutionId,
+					taskId: execution.taskId,
 				},
 			),
 		);
@@ -1299,16 +1334,16 @@ export class Mission extends Entity<MissionStorageType, string> {
 		if (this.workflowController.getRuntimeAgentExecution(agentExecutionId)) {
 			return;
 		}
-		const record = this.requireAgentExecutionRecord(agentExecutionId);
+		const execution = this.requireAgentExecutionData(agentExecutionId);
 		await this.workflowController.attachRuntimeAgentExecution({
-			agentId: record.agentId,
-			agentExecutionId: record.agentExecutionId,
-			...(record.transportId === 'terminal' || record.terminalHandle
+			agentId: execution.agentId,
+			agentExecutionId: execution.agentExecutionId,
+			...(execution.transportId === 'terminal' || execution.terminalHandle
 				? {
 					transport: {
 						kind: 'terminal',
-						terminalName: record.terminalHandle?.terminalName ?? record.agentExecutionId,
-						...(record.terminalHandle?.terminalPaneId ? { terminalPaneId: record.terminalHandle.terminalPaneId } : {})
+						terminalName: execution.terminalHandle?.terminalName ?? execution.agentExecutionId,
+						...(execution.terminalHandle?.terminalPaneId ? { terminalPaneId: execution.terminalHandle.terminalPaneId } : {})
 					}
 				}
 				: {})
@@ -1317,7 +1352,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 
 	private syncAgentExecutions(document: WorkflowStateData | undefined): void {
 		if (!document) {
-			this.agentExecutionRecords = [];
+			this.agentExecutionData = [];
 			this.consoleStates.clear();
 			return;
 		}
@@ -1335,29 +1370,29 @@ export class Mission extends Entity<MissionStorageType, string> {
 			] as const)
 		);
 
-		this.agentExecutionRecords = document.runtime.agentExecutions.map((execution) => {
+		this.agentExecutionData = document.runtime.agentExecutions.map((execution) => {
 			const agentExecutionProcess = agentExecutionSnapshots.get(execution.agentExecutionId);
 			const task = tasksById.get(execution.taskId);
-			return AgentExecution.createRecordFromLaunch({
+			return AgentExecution.createDataFromLaunch({
 				launch: execution,
 				adapterLabel: this.agentRegistry.resolveAgent(execution.agentId)?.displayName ?? execution.agentId,
-				...(agentExecutionProcess ? { snapshot: agentExecutionProcess } : {}),
+				...(agentExecutionProcess ? { execution: agentExecutionProcess } : {}),
 				...(task ? { task } : {}),
 				missionId: this.descriptor.missionId,
 				missionDir: this.adapter.getMissionWorkspacePath(this.missionDir)
 			});
 		});
-		this.terminalRecordingWriter.reconcile(this.agentExecutionRecords);
+		this.terminalRecordingWriter.reconcile(this.agentExecutionData);
 
-		const activeAgentExecutionIds = new Set(this.agentExecutionRecords.map((execution) => execution.agentExecutionId));
-		for (const record of this.agentExecutionRecords) {
-			if (!this.consoleStates.has(record.agentExecutionId)) {
-				this.consoleStates.set(record.agentExecutionId, Mission.createEmptyAgentConsoleState({
-					awaitingInput: Mission.hasSemanticInputRequest(record),
-					agentId: record.agentId,
-					adapterLabel: record.adapterLabel,
-					agentExecutionId: record.agentExecutionId,
-					...(record.currentTurnTitle ? { title: record.currentTurnTitle } : {})
+		const activeAgentExecutionIds = new Set(this.agentExecutionData.map((execution) => execution.agentExecutionId));
+		for (const execution of this.agentExecutionData) {
+			if (!this.consoleStates.has(execution.agentExecutionId)) {
+				this.consoleStates.set(execution.agentExecutionId, Mission.createEmptyAgentConsoleState({
+					awaitingInput: Mission.hasSemanticInputRequest(execution),
+					agentId: execution.agentId,
+					adapterLabel: execution.adapterLabel,
+					agentExecutionId: execution.agentExecutionId,
+					...(execution.currentTurnTitle ? { title: execution.currentTurnTitle } : {})
 				}));
 			}
 		}
@@ -1369,45 +1404,45 @@ export class Mission extends Entity<MissionStorageType, string> {
 	}
 
 	private emitSyntheticAgentExecutionStart(snapshot: AgentExecutionType): void {
-		const agentExecutionRecord = this.getAgentExecution(snapshot.agentExecutionId);
-		const state = agentExecutionRecord
-			? AgentExecution.createStateFromExecution({
+		const missionExecution = this.getAgentExecution(snapshot.agentExecutionId);
+		const execution = missionExecution
+			? AgentExecution.createDataFromExecutionUpdate({
 				execution: snapshot,
-				adapterLabel: agentExecutionRecord.adapterLabel,
-				record: agentExecutionRecord
+				adapterLabel: missionExecution.adapterLabel,
+				existing: missionExecution
 			})
-			: AgentExecution.createStateFromExecution({
+			: AgentExecution.createDataFromExecutionUpdate({
 				execution: snapshot,
 				adapterLabel: this.agentRegistry.resolveAgent(snapshot.agentId)?.displayName ?? snapshot.agentId
 			});
 		this.agentEventEmitter.fire({
 			type: 'agent-execution-started',
-			state
+			execution
 		});
 	}
 
 	private handleAgentExecutionRuntimeEvent(event: AgentExecutionEvent): void {
-		const agentExecutionRecord = this.getAgentExecution(event.execution.agentExecutionId);
-		const state = agentExecutionRecord
-			? AgentExecution.createStateFromExecution({
+		const missionExecution = this.getAgentExecution(event.execution.agentExecutionId);
+		const execution = missionExecution
+			? AgentExecution.createDataFromExecutionUpdate({
 				execution: event.execution,
-				adapterLabel: agentExecutionRecord.adapterLabel,
-				record: agentExecutionRecord
+				adapterLabel: missionExecution.adapterLabel,
+				existing: missionExecution
 			})
-			: AgentExecution.createStateFromExecution({
+			: AgentExecution.createDataFromExecutionUpdate({
 				execution: event.execution,
 				adapterLabel:
 					this.agentRegistry.resolveAgent(event.execution.agentId)?.displayName ?? event.execution.agentId
 			});
 		const currentConsole = this.consoleStates.get(event.execution.agentExecutionId) ?? Mission.createEmptyAgentConsoleState({
-			awaitingInput: Mission.hasSemanticInputRequest(state),
-			agentId: state.agentId,
-			adapterLabel: state.adapterLabel,
-			agentExecutionId: state.agentExecutionId,
-			...(state.currentTurnTitle ? { title: state.currentTurnTitle } : {})
+			awaitingInput: Mission.hasSemanticInputRequest(execution),
+			agentId: execution.agentId,
+			adapterLabel: execution.adapterLabel,
+			agentExecutionId: execution.agentExecutionId,
+			...(execution.currentTurnTitle ? { title: execution.currentTurnTitle } : {})
 		});
-		if (agentExecutionRecord) {
-			this.terminalRecordingWriter.update(agentExecutionRecord);
+		if (missionExecution) {
+			this.terminalRecordingWriter.update(missionExecution);
 		}
 
 		switch (event.type) {
@@ -1416,13 +1451,13 @@ export class Mission extends Entity<MissionStorageType, string> {
 			case 'execution.updated': {
 				const nextState = Mission.cloneAgentConsoleState({
 					...currentConsole,
-					awaitingInput: Mission.hasSemanticInputRequest(state),
-					...(state.currentTurnTitle ? { title: state.currentTurnTitle } : {})
+					awaitingInput: Mission.hasSemanticInputRequest(execution),
+					...(execution.currentTurnTitle ? { title: execution.currentTurnTitle } : {})
 				});
-				this.consoleStates.set(state.agentExecutionId, nextState);
+				this.consoleStates.set(execution.agentExecutionId, nextState);
 				this.agentEventEmitter.fire({
-					type: 'agent-execution-state-changed',
-					state
+					type: 'agent-execution-changed',
+					execution
 				});
 				return;
 			}
@@ -1430,9 +1465,9 @@ export class Mission extends Entity<MissionStorageType, string> {
 				const nextState = Mission.cloneAgentConsoleState({
 					...currentConsole,
 					lines: [...currentConsole.lines, event.text],
-					awaitingInput: Mission.hasSemanticInputRequest(state)
+					awaitingInput: Mission.hasSemanticInputRequest(execution)
 				});
-				this.consoleStates.set(state.agentExecutionId, nextState);
+				this.consoleStates.set(execution.agentExecutionId, nextState);
 				this.agentConsoleEventEmitter.fire({
 					type: 'lines',
 					lines: [event.text],
@@ -1442,7 +1477,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 					type: 'agent-message',
 					channel: event.channel === 'stderr' ? 'stderr' : event.channel === 'stdout' ? 'stdout' : 'system',
 					text: event.text,
-					state
+					execution
 				});
 				return;
 			}
@@ -1450,29 +1485,29 @@ export class Mission extends Entity<MissionStorageType, string> {
 				this.agentEventEmitter.fire({
 					type: 'agent-execution-completed',
 					exitCode: 0,
-					state
+					execution
 				});
 				return;
 			case 'execution.failed':
 				this.agentEventEmitter.fire({
 					type: 'agent-execution-failed',
 					errorMessage: event.reason,
-					state
+					execution
 				});
 				return;
 			case 'execution.cancelled':
 				this.agentEventEmitter.fire({
 					type: 'agent-execution-cancelled',
 					...(event.reason ? { reason: event.reason } : {}),
-					state
+					execution
 				});
 				return;
 			case 'execution.terminated':
 				this.agentEventEmitter.fire({
 					type: 'agent-execution-cancelled',
 					...(event.reason ? { reason: event.reason } : {}),
-					state: {
-						...state,
+					execution: {
+						...execution,
 						lifecycleState: 'terminated'
 					}
 				});
@@ -1537,7 +1572,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 	}
 
 	private hasActiveAgentExecutions(): boolean {
-		return this.agentExecutionRecords.some((execution) => Mission.isActiveAgentExecution(execution.lifecycleState));
+		return this.agentExecutionData.some((execution) => Mission.isActiveAgentExecution(execution.lifecycleState));
 	}
 
 	private invalidateCachedMissionState(): void {
@@ -1558,7 +1593,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 	}
 
 	private async completeTaskExecution(taskId: string): Promise<void> {
-		const activeAgentExecutions = this.agentExecutionRecords.filter(
+		const activeAgentExecutions = this.agentExecutionData.filter(
 			(candidate) => candidate.taskId === taskId && Mission.isActiveAgentExecution(candidate.lifecycleState)
 		);
 		for (const execution of activeAgentExecutions) {
@@ -1571,11 +1606,11 @@ export class Mission extends Entity<MissionStorageType, string> {
 	}
 
 	private async cancelTaskExecution(taskId: string, reason?: string): Promise<void> {
-		const activeAgentExecutions = this.agentExecutionRecords.filter(
+		const activeAgentExecutions = this.agentExecutionData.filter(
 			(candidate) => candidate.taskId === taskId && Mission.isActiveAgentExecution(candidate.lifecycleState)
 		);
 		for (const execution of activeAgentExecutions) {
-			await this.cancelAgentExecutionRecord(execution.agentExecutionId, reason ?? 'task cancelled');
+			await this.cancelAgentExecutionData(execution.agentExecutionId, reason ?? 'task cancelled');
 		}
 		if (activeAgentExecutions.length === 0) {
 			await this.applyWorkflowEvent(this.createWorkflowEvent('task.cancelled', {
@@ -1859,7 +1894,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 			...(currentStageId ? { currentStageId } : {}),
 			artifacts,
 			stages,
-			agentExecutions: Mission.requireArray(status.agentExecutions, 'Mission status agentExecutions').map((agentExecution) => AgentExecution.toDataFromRecord(agentExecution)),
+			agentExecutions: Mission.requireArray(status.agentExecutions, 'Mission status agentExecutions').map((agentExecution) => AgentExecution.cloneData(agentExecution)),
 			...(status.recommendedAction ? { recommendedAction: status.recommendedAction } : {})
 		});
 	}

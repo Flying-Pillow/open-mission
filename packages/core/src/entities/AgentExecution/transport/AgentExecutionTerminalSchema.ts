@@ -53,7 +53,7 @@ export const AgentExecutionTerminalRouteInputSchema = z.object({
     message: 'Agent execution terminal input requires data or a complete cols/rows resize payload.'
 });
 
-export const AgentExecutionTerminalSnapshotSchema = z.object({
+export const AgentExecutionTerminalSchema = z.object({
     ownerId: z.string().trim().min(1),
     agentExecutionId: z.string().trim().min(1),
     connected: z.boolean(),
@@ -138,8 +138,8 @@ export const AgentExecutionTerminalOutputSchema = z.object({
 
 export const AgentExecutionTerminalSocketServerMessageSchema = z.discriminatedUnion('type', [
     z.object({
-        type: z.literal('snapshot'),
-        snapshot: AgentExecutionTerminalSnapshotSchema
+        type: z.literal('terminal'),
+        terminal: AgentExecutionTerminalSchema
     }).strict(),
     z.object({
         type: z.literal('output'),
@@ -147,7 +147,7 @@ export const AgentExecutionTerminalSocketServerMessageSchema = z.discriminatedUn
     }).strict(),
     z.object({
         type: z.literal('disconnected'),
-        snapshot: AgentExecutionTerminalSnapshotSchema
+        terminal: AgentExecutionTerminalSchema
     }).strict(),
     z.object({
         type: z.literal('error'),
@@ -161,7 +161,7 @@ export type AgentExecutionTerminalRouteInputType = z.infer<typeof AgentExecution
 export type AgentExecutionTerminalRecordingHeaderEventType = z.infer<typeof AgentExecutionTerminalRecordingHeaderEventSchema>;
 export type AgentExecutionTerminalRecordingEventType = z.infer<typeof AgentExecutionTerminalRecordingEventSchema>;
 export type AgentExecutionTerminalRecordingType = z.infer<typeof AgentExecutionTerminalRecordingSchema>;
-export type AgentExecutionTerminalSnapshotType = z.infer<typeof AgentExecutionTerminalSnapshotSchema>;
+export type AgentExecutionTerminalType = z.infer<typeof AgentExecutionTerminalSchema>;
 export type AgentExecutionTerminalSocketClientMessageType = z.infer<typeof AgentExecutionTerminalSocketClientMessageSchema>;
 export type AgentExecutionTerminalOutputType = z.infer<typeof AgentExecutionTerminalOutputSchema>;
 export type AgentExecutionTerminalSocketServerMessageType = z.infer<typeof AgentExecutionTerminalSocketServerMessageSchema>;

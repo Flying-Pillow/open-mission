@@ -12,7 +12,7 @@ import {
     type AgentExecutionObservationAckType,
     type AgentExecutionType
 } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
-import { AgentExecutor } from './AgentExecutor.js';
+import { AgentExecutionCoordinator } from './AgentExecutionCoordinator.js';
 import type { OpenMissionMcpServer } from './mcp/OpenMissionMcpServer.js';
 import type {
     AgentExecutionSemanticOperationInvocationType,
@@ -22,7 +22,7 @@ import type {
 
 type AgentExecutionRegistryEntry = {
     ownerKey: string;
-    agentExecutor: AgentExecutor;
+    agentExecutionCoordinator: AgentExecutionCoordinator;
     execution: AgentExecution;
     dataChangeSubscription: { dispose(): void };
 };
@@ -178,19 +178,19 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         agentRegistry: AgentRegistry;
         config: AgentLaunchConfig;
     }): Promise<AgentExecutionType> {
-        const agentExecutor = new AgentExecutor({
+        const agentExecutionCoordinator = new AgentExecutionCoordinator({
             agentRegistry: input.agentRegistry,
             ...(this.openMissionMcpServer ? { openMissionMcpServer: this.openMissionMcpServer } : {}),
             ...(this.logger ? { logger: this.logger } : {})
         });
-        const execution = await agentExecutor.startExecution(input.config);
+        const execution = await agentExecutionCoordinator.startExecution(input.config);
         const agentExecutionId = execution.agentExecutionId;
         this.disposeAgentExecution(agentExecutionId);
         const dataChangeSubscription = execution.onDidDataChange((data) => this.emitDataChanged(data));
         this.agentExecutionIdsByOwnerKey.set(input.ownerKey, agentExecutionId);
         this.executionsByAgentExecutionId.set(agentExecutionId, {
             ownerKey: input.ownerKey,
-            agentExecutor,
+            agentExecutionCoordinator,
             execution,
             dataChangeSubscription
         });
@@ -207,16 +207,16 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         const entry = this.requireExecution(agentExecutionId);
         switch (command.commandId) {
             case 'agentExecution.complete':
-                await entry.agentExecutor.completeExecution(agentExecutionId);
+                await entry.agentExecutionCoordinator.completeExecution(agentExecutionId);
                 break;
             case 'agentExecution.cancel':
-                await entry.agentExecutor.cancelExecution(agentExecutionId, readReason(command.input));
+                await entry.agentExecutionCoordinator.cancelExecution(agentExecutionId, readReason(command.input));
                 break;
             case 'agentExecution.sendPrompt':
-                await entry.agentExecutor.submitPrompt(agentExecutionId, AgentExecutionPromptSchema.parse(command.input));
+                await entry.agentExecutionCoordinator.submitPrompt(agentExecutionId, AgentExecutionPromptSchema.parse(command.input));
                 break;
             case 'agentExecution.sendRuntimeMessage':
-                await entry.agentExecutor.submitCommand(agentExecutionId, AgentExecutionCommandSchema.parse(command.input));
+                await entry.agentExecutionCoordinator.submitCommand(agentExecutionId, AgentExecutionCommandSchema.parse(command.input));
                 break;
         }
         return this.toExecutionData(entry.execution);
@@ -279,7 +279,7 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
                 reason: `AgentExecution '${input.agentExecutionId}' is not registered in the daemon AgentExecutionRegistry.`
             });
         }
-        return AgentExecutionObservationAckSchema.parse(await entry.agentExecutor.routeTransportObservation(input));
+        return AgentExecutionObservationAckSchema.parse(await entry.agentExecutionCoordinator.routeTransportObservation(input));
     }
 
     public async invokeSemanticOperation(input: AgentExecutionSemanticOperationInvocationType): Promise<AgentExecutionSemanticOperationResultType> {
@@ -287,7 +287,7 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         if (!entry) {
             throw new Error(`AgentExecution '${input.agentExecutionId}' is not registered in the daemon AgentExecutionRegistry.`);
         }
-        return entry.agentExecutor.invokeSemanticOperation(input);
+        return entry.agentExecutionCoordinator.invokeSemanticOperation(input);
     }
 
     public onDidExecutionDataChange(listener: (data: AgentExecutionType) => void): { dispose(): void } {
@@ -329,7 +329,7 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         }
 
         try {
-            await entry.agentExecutor.terminateExecution(agentExecutionId, reason);
+            await entry.agentExecutionCoordinator.terminateExecution(agentExecutionId, reason);
         } catch (error) {
             this.logger?.debug('Failed to terminate AgentExecution before retirement.', {
                 agentExecutionId,
@@ -346,7 +346,7 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         if (!entry) {
             return;
         }
-        entry.agentExecutor.dispose();
+        entry.agentExecutionCoordinator.dispose();
         entry.dataChangeSubscription.dispose();
         this.executionsByAgentExecutionId.delete(agentExecutionId);
         if (this.agentExecutionIdsByOwnerKey.get(entry.ownerKey) === agentExecutionId) {

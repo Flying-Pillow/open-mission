@@ -3,18 +3,18 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { IPty } from 'node-pty';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Agent } from '../../../../entities/Agent/Agent.js';
-import { AgentRegistry } from '../../../../entities/Agent/AgentRegistry.js';
+import { Agent } from '../../../../../entities/Agent/Agent.js';
+import { AgentRegistry } from '../../../../../entities/Agent/AgentRegistry.js';
 import type {
     AgentExecutionEvent,
     AgentExecutionType,
     AgentLaunchConfig,
     AgentPrompt
-} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+} from '../../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
-import { AgentExecutor } from '../AgentExecutor.js';
-import { OpenMissionMcpServer } from '../mcp/OpenMissionMcpServer.js';
-import { createMemoryAgentExecutionJournalWriter } from '../testing/createMemoryAgentExecutionJournalWriter.js';
+import { AgentExecutionCoordinator } from '../../AgentExecutionCoordinator.js';
+import { OpenMissionMcpServer } from '../../mcp/OpenMissionMcpServer.js';
+import { createMemoryAgentExecutionJournalWriter } from '../../testing/createMemoryAgentExecutionJournalWriter.js';
 import { createClaudeCode } from './ClaudeCode.js';
 
 type MockTerminalState = {
@@ -77,7 +77,7 @@ async function startExecution(
     });
     await openMissionMcpServer.start();
     const { journalWriter } = createMemoryAgentExecutionJournalWriter();
-    const executor = new AgentExecutor({
+    const executor = new AgentExecutionCoordinator({
         agentRegistry: new AgentRegistry({
             agents: [await Agent.fromAdapter(adapter)]
         }),

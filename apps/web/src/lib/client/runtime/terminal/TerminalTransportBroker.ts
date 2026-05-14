@@ -1,7 +1,7 @@
 import {
-    AgentExecutionTerminalSnapshotSchema,
+    AgentExecutionTerminalSchema,
     AgentExecutionTerminalSocketServerMessageSchema,
-    type AgentExecutionTerminalSnapshotType,
+    type AgentExecutionTerminalType,
     type AgentExecutionTerminalSocketClientMessageType,
     type AgentExecutionTerminalSocketServerMessageType
 } from '@flying-pillow/open-mission-core/entities/AgentExecution/AgentExecutionSchema';
@@ -36,8 +36,16 @@ type TerminalOutputBase = {
 
 type TerminalServerMessage<TSnapshot extends TerminalSnapshotBase, TOutput extends TerminalOutputBase> =
     | {
-        type: 'snapshot' | 'disconnected';
+        type: 'snapshot';
         snapshot: TSnapshot;
+    }
+    | {
+        type: 'disconnected';
+        snapshot: TSnapshot;
+    }
+    | {
+        type: 'terminal' | 'disconnected';
+        terminal: TSnapshot;
     }
     | {
         type: 'output';
@@ -54,7 +62,7 @@ type TerminalClientMessage =
 
 type SharedTerminalSnapshot =
     | MissionTerminalSnapshotType
-    | AgentExecutionTerminalSnapshotType;
+    | AgentExecutionTerminalType;
 
 type SharedTerminalServerMessage =
     | MissionTerminalSocketServerMessageType
@@ -163,8 +171,8 @@ export function subscribeAgentExecutionTerminalTransport(
         repositoryRootPath?: string;
         agentExecutionId: string;
     },
-    listener: TerminalBrokerListener<AgentExecutionTerminalSnapshotType>,
-): SharedTerminalTransportSubscription<AgentExecutionTerminalSnapshotType> {
+    listener: TerminalBrokerListener<AgentExecutionTerminalType>,
+): SharedTerminalTransportSubscription<AgentExecutionTerminalType> {
     const ownerId = input.ownerId.trim();
     const repositoryId = input.repositoryId.trim();
     const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
@@ -182,7 +190,7 @@ export function subscribeAgentExecutionTerminalTransport(
                 throw new Error(`Terminal data request failed (${response.status}).`);
             }
 
-            return AgentExecutionTerminalSnapshotSchema.parse(await response.json());
+            return AgentExecutionTerminalSchema.parse(await response.json());
         },
         createSocket: () => {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -368,6 +376,7 @@ class TerminalTransportChannel<
             this.handleMessage(message);
             if (
                 message.type === 'snapshot' ||
+                message.type === 'terminal' ||
                 message.type === 'disconnected'
             ) {
                 this.receivedSnapshot = true;
@@ -426,9 +435,20 @@ class TerminalTransportChannel<
     }
 
     private handleMessage(message: TMessage): void {
-        if (message.type === 'snapshot' || message.type === 'disconnected') {
+        if (message.type === 'snapshot') {
             this.state = {
                 snapshot: cloneSnapshot(message.snapshot),
+                loading: false,
+                error: null,
+            };
+            this.notify();
+            return;
+        }
+
+        if (message.type === 'terminal' || message.type === 'disconnected') {
+            const nextSnapshot = 'terminal' in message ? message.terminal : message.snapshot;
+            this.state = {
+                snapshot: cloneSnapshot(nextSnapshot),
                 loading: false,
                 error: null,
             };

@@ -11,7 +11,7 @@
     } from "$lib/client/runtime/terminal/GhosttyTerminalRuntime";
     import type {
         AgentExecutionCommandType,
-        AgentExecutionTerminalSnapshotType,
+        AgentExecutionTerminalType,
     } from "@flying-pillow/open-mission-core/entities/AgentExecution/AgentExecutionSchema";
     import {
         subscribeAgentExecutionTerminalTransport,
@@ -30,9 +30,7 @@
         panelMode?: "full" | "terminal";
     } = $props();
     let container = $state<HTMLDivElement | null>(null);
-    let terminalSnapshot = $state<AgentExecutionTerminalSnapshotType | null>(
-        null,
-    );
+    let terminalState = $state<AgentExecutionTerminalType | null>(null);
     let loading = $state(false);
     let error = $state<string | null>(null);
     let sendingInput = $state(false);
@@ -41,7 +39,7 @@
     let terminal: AppTerminal | null = null;
     let terminalRuntime: AppTerminalRuntime | null = null;
     let terminalTransport =
-        $state<SharedTerminalTransportSubscription<AgentExecutionTerminalSnapshotType> | null>(
+        $state<SharedTerminalTransportSubscription<AgentExecutionTerminalType> | null>(
             null,
         );
     let pendingInput = "";
@@ -119,9 +117,9 @@
             app.repository?.data.repositoryRootPath ??
             "",
     );
-    const isPersistedTranscriptSnapshot = $derived(
+    const isPersistedTerminalRecording = $derived(
         Boolean(agentExecution && !agentExecution.isRunning()) ||
-            Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),
+            Boolean(terminalState?.dead && !terminalState?.connected),
     );
     const terminalStateLabel = $derived.by(() => {
         if (!agentExecution) {
@@ -130,15 +128,15 @@
         if (!canAttachTerminal) {
             return "Not terminal-backed";
         }
-        if (loading && !terminalSnapshot) {
+        if (loading && !terminalState) {
             return "Connecting";
         }
-        if (terminalSnapshot?.dead) {
-            return terminalSnapshot.exitCode === null
+        if (terminalState?.dead) {
+            return terminalState.exitCode === null
                 ? "Exited"
-                : `Exited (${terminalSnapshot.exitCode})`;
+                : `Exited (${terminalState.exitCode})`;
         }
-        if (terminalSnapshot?.connected) {
+        if (terminalState?.connected) {
             return "Attached";
         }
         if (agentExecution.lifecycleState === "failed") {
@@ -147,7 +145,7 @@
         return "Connecting";
     });
     $effect(() => {
-        if (isPersistedTranscriptSnapshot) {
+        if (isPersistedTerminalRecording) {
             terminalRuntime?.dispose();
             terminalRuntime = null;
             terminal = null;
@@ -187,7 +185,7 @@
             !surfacePath
         ) {
             activeTransportKey = null;
-            terminalSnapshot = null;
+            terminalState = null;
             error = null;
             loading = false;
             terminalTransport?.dispose();
@@ -207,7 +205,7 @@
         }
 
         activeTransportKey = nextTransportKey;
-        terminalSnapshot = null;
+        terminalState = null;
         loading = true;
         error = null;
         pendingInput = "";
@@ -223,7 +221,7 @@
                 agentExecutionId: terminalId,
             },
             (state) => {
-                terminalSnapshot = state.snapshot;
+                terminalState = state.snapshot;
                 loading = state.loading;
                 error = state.error;
             },
@@ -231,18 +229,18 @@
     });
 
     $effect(() => {
-        const screen = terminalSnapshot?.screen ?? "";
+        const screen = terminalState?.screen ?? "";
         if (
             !terminal ||
             typeof screen !== "string" ||
-            isPersistedTranscriptSnapshot
+            isPersistedTerminalRecording
         ) {
             return;
         }
 
         const preparedScreen = prepareScreenForTerminal(
             screen,
-            isPersistedTranscriptSnapshot,
+            isPersistedTerminalRecording,
         );
 
         if (preparedScreen === lastRenderedScreen) {
@@ -410,7 +408,7 @@
                 if (
                     !agentExecution ||
                     !canAttachTerminal ||
-                    terminalSnapshot?.dead
+                    terminalState?.dead
                 ) {
                     return;
                 }
@@ -427,7 +425,7 @@
                 if (
                     !agentExecution ||
                     !canAttachTerminal ||
-                    terminalSnapshot?.dead
+                    terminalState?.dead
                 ) {
                     return;
                 }
@@ -634,9 +632,9 @@
                         "This session is not terminal-backed, so Mission Control cannot attach an interactive console."}
                 {/if}
             </div>
-        {:else if isPersistedTranscriptSnapshot}
+        {:else if isPersistedTerminalRecording}
             <AgentExecutionTerminalReplay
-                recording={terminalSnapshot?.recording}
+                recording={terminalState?.recording}
             />
         {:else}
             <div class="h-full min-h-[24rem] overflow-hidden">

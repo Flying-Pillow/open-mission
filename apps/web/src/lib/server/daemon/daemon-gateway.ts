@@ -6,8 +6,8 @@ import {
     createMissionRuntimeEventSubscriptionChannels
 } from '@flying-pillow/open-mission-core/entities/Mission/MissionContract';
 import {
-    AgentExecutionTerminalSnapshotSchema,
-    type AgentExecutionTerminalSnapshotType,
+    AgentExecutionTerminalSchema,
+    type AgentExecutionTerminalType,
 } from '@flying-pillow/open-mission-core/entities/AgentExecution/AgentExecutionSchema';
 import {
     MissionRuntimeEventEnvelopeSchema,
@@ -99,12 +99,12 @@ export class DaemonGateway {
         };
     }
 
-    public async getAgentExecutionTerminalSnapshot(input: {
+    public async getAgentExecutionTerminal(input: {
         ownerId: string;
         agentExecutionId: string;
         surfacePath?: string;
-    }): Promise<AgentExecutionTerminalSnapshotType> {
-        return this.withSharedClient(input.surfacePath, async (daemon) => AgentExecutionTerminalSnapshotSchema.parse(
+    }): Promise<AgentExecutionTerminalType> {
+        return this.withSharedClient(input.surfacePath, async (daemon) => AgentExecutionTerminalSchema.parse(
             await withTimeout(
                 daemon.client.request('entity.query', {
                     entity: 'AgentExecution',
@@ -115,7 +115,7 @@ export class DaemonGateway {
                     }
                 }),
                 2500,
-                'AgentExecution terminal snapshot request timed out.'
+                'AgentExecution terminal request timed out.'
             )
         ));
     }
@@ -128,8 +128,8 @@ export class DaemonGateway {
         cols?: number;
         rows?: number;
         surfacePath?: string;
-    }): Promise<AgentExecutionTerminalSnapshotType> {
-        return this.withSharedClient(input.surfacePath, async (daemon) => AgentExecutionTerminalSnapshotSchema.parse(
+    }): Promise<AgentExecutionTerminalType> {
+        return this.withSharedClient(input.surfacePath, async (daemon) => AgentExecutionTerminalSchema.parse(
             await withTimeout(
                 daemon.client.request('entity.command', {
                     entity: 'AgentExecution',

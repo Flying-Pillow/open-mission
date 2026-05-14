@@ -9,13 +9,13 @@ import type {
 	AgentExecutionType,
 	AgentLaunchConfig,
 	AgentPrompt
-} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
-import { Agent } from '../../../../entities/Agent/Agent.js';
-import { AgentRegistry } from '../../../../entities/Agent/AgentRegistry.js';
+} from '../../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import { Agent } from '../../../../../entities/Agent/Agent.js';
+import { AgentRegistry } from '../../../../../entities/Agent/AgentRegistry.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
-import { AgentExecutor } from '../AgentExecutor.js';
-import { OpenMissionMcpServer } from '../mcp/OpenMissionMcpServer.js';
-import { createMemoryAgentExecutionJournalWriter } from '../testing/createMemoryAgentExecutionJournalWriter.js';
+import { AgentExecutionCoordinator } from '../../AgentExecutionCoordinator.js';
+import { OpenMissionMcpServer } from '../../mcp/OpenMissionMcpServer.js';
+import { createMemoryAgentExecutionJournalWriter } from '../../testing/createMemoryAgentExecutionJournalWriter.js';
 import { createCopilot } from './Copilot.js';
 
 type MockTerminalState = {
@@ -86,7 +86,7 @@ async function startExecution(
 	});
 	await openMissionMcpServer.start();
 	const { journalWriter } = createMemoryAgentExecutionJournalWriter();
-	const executor = new AgentExecutor({
+	const executor = new AgentExecutionCoordinator({
 		agentRegistry: new AgentRegistry({
 			agents: [await Agent.fromAdapter(adapter)]
 		}),
@@ -178,7 +178,7 @@ describe('Copilot', () => {
 	});
 
 
-	it('uses the source Mission CLI bridge for MCP config in source runtime mode', async () => {
+	it('uses the source Open Mission CLI bridge for MCP config in source runtime mode', async () => {
 		vi.stubEnv('OPEN_MISSION_DAEMON_RUNTIME_MODE', 'source');
 		const adapter = createAgentAdapter(createCopilot({
 			launchMode: 'interactive',
@@ -199,7 +199,7 @@ describe('Copilot', () => {
 		expect(bridge?.command).toBe('pnpm');
 		expect(bridge?.args).toEqual([
 			'--dir',
-			'/mission',
+			process.cwd(),
 			'--filter',
 			'@flying-pillow/open-mission',
 			'exec',
@@ -216,7 +216,7 @@ describe('Copilot', () => {
 		expect(bridge?.env?.['OPEN_MISSION_MCP_TOKEN']).toBeTruthy();
 	});
 
-	it('honors an explicit Mission CLI bridge command override', async () => {
+	it('honors an explicit Open Mission CLI bridge command override', async () => {
 		vi.stubEnv('OPEN_MISSION_DAEMON_RUNTIME_MODE', 'source');
 		vi.stubEnv('OPEN_MISSION_CLI_COMMAND', '/opt/open-mission/bin/open-mission');
 		const adapter = createAgentAdapter(createCopilot({

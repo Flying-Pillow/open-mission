@@ -5,9 +5,9 @@ import {
 } from '../AgentExecution/protocol/AgentExecutionProtocolSchema.js';
 import {
     WorkflowConfigurationSnapshotSchema,
-    WorkflowGateProjectionSchema,
+    WorkflowGateTimelineSchema,
     WorkflowPauseStateSchema,
-    WorkflowStageRuntimeProjectionSchema,
+    WorkflowStageRuntimeTimelineSchema,
     WorkflowTaskRuntimeStateSchema,
     type WorkflowTaskLifecycleState
 } from '../../workflow/engine/types.js';
@@ -23,12 +23,10 @@ import {
 } from '../Entity/EntitySchema.js';
 import {
     AgentExecutionEventSubjectSchema,
-    AgentExecutionTerminalSnapshotSchema,
+    AgentExecutionTerminalSchema,
     AgentExecutionSchema,
     AgentExecutionChangedSchema,
     AgentExecutionLifecycleStateSchema,
-    type AgentExecutionRecordType,
-    type AgentExecutionStateType,
     type AgentExecutionPermissionRequestType,
     type AgentExecutionTelemetryType
 } from '../AgentExecution/AgentExecutionSchema.js';
@@ -211,9 +209,9 @@ export const MissionWorkflowStateSchema = MissionStorageSchema.pick({
     currentStageId: true
 }).extend({
     pause: WorkflowPauseStateSchema.optional(),
-    stages: z.array(WorkflowStageRuntimeProjectionSchema).optional(),
+    stages: z.array(WorkflowStageRuntimeTimelineSchema).optional(),
     tasks: z.array(WorkflowTaskRuntimeStateSchema).optional(),
-    gates: z.array(WorkflowGateProjectionSchema).optional()
+    gates: z.array(WorkflowGateTimelineSchema).optional()
 }).strict();
 
 export const MissionWorktreeNodeSchema: z.ZodType<MissionWorktreeNodeData> = z.object({
@@ -288,7 +286,7 @@ export const MissionRuntimeEventEnvelopeSchema = z.discriminatedUnion('type', [
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
         type: z.literal('execution.terminal'),
-        payload: AgentExecutionTerminalSnapshotSchema
+        payload: AgentExecutionTerminalSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
         type: z.literal('execution.event'),

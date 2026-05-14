@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DaemonGateway } from './daemon-gateway';
 
-type ProjectionGateway = {
+type TimelineGateway = {
     toRuntimeEventEnvelope(event: unknown): unknown;
 };
 
-describe('DaemonGateway runtime projection forwarding', () => {
-    it('validates and forwards typed child entity projection notifications', () => {
-        const gateway = new DaemonGateway() as unknown as ProjectionGateway;
+describe('DaemonGateway runtime timeline forwarding', () => {
+    it('validates and forwards typed child entity timeline notifications', () => {
+        const gateway = new DaemonGateway() as unknown as TimelineGateway;
 
         const envelope = gateway.toRuntimeEventEnvelope({
             eventId: 'event-task-data-changed-1',
@@ -61,7 +61,7 @@ describe('DaemonGateway runtime projection forwarding', () => {
     });
 
     it('carries daemon-owned entity channel metadata into runtime envelopes', () => {
-        const gateway = new DaemonGateway() as unknown as ProjectionGateway;
+        const gateway = new DaemonGateway() as unknown as TimelineGateway;
 
         const envelope = gateway.toRuntimeEventEnvelope({
             eventId: 'event-mission-status-1',

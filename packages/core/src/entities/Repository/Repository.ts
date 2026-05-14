@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityClassCommandViewType, type EntityCommandViewType } from '../Entity/EntitySchema.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
-import { getDefaultAgentExecutionRegistry } from '../../daemon/runtime/agent/AgentExecutionRegistry.js';
+import { getDefaultAgentExecutionRegistry } from '../../daemon/runtime/agent-execution/AgentExecutionRegistry.js';
 import type { AgentExecutionType } from '../AgentExecution/AgentExecutionSchema.js';
 import type { Mission, MissionWorkflowBindings } from '../Mission/Mission.js';
 import {

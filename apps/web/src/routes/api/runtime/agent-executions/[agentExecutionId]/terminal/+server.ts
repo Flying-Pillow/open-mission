@@ -1,4 +1,4 @@
-// /apps/web/src/routes/api/runtime/agent-executions/[agentExecutionId]/terminal/+server.ts: AgentExecution terminal snapshot/input relay over Open Mission web runtime routes.
+// /apps/web/src/routes/api/runtime/agent-executions/[agentExecutionId]/terminal/+server.ts: AgentExecution terminal/input relay over Open Mission web runtime routes.
 import { json } from '@sveltejs/kit';
 import { AgentExecutionTerminalRouteInputSchema as agentExecutionTerminalInputSchema, AgentExecutionTerminalRouteQuerySchema as agentExecutionTerminalQuerySchema, AgentExecutionTerminalRouteParamsSchema as agentExecutionTerminalRouteParamsSchema } from '@flying-pillow/open-mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
@@ -21,13 +21,13 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
             repositoryId: query.repositoryId,
             repositoryRootPath: query.repositoryRootPath
         });
-        const snapshot = await gateway.getAgentExecutionTerminalSnapshot({
+        const terminal = await gateway.getAgentExecutionTerminal({
             ownerId: query.ownerId,
             agentExecutionId,
             ...(surfacePath ? { surfacePath } : {})
         });
 
-        return json(snapshot, {
+        return json(terminal, {
             headers: {
                 'cache-control': 'no-store'
             }
@@ -60,7 +60,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
             repositoryId: query.repositoryId,
             repositoryRootPath: query.repositoryRootPath
         });
-        const snapshot = await gateway.sendAgentExecutionTerminalInput({
+        const terminal = await gateway.sendAgentExecutionTerminalInput({
             ownerId: body.ownerId,
             agentExecutionId,
             ...(body.data !== undefined ? { data: body.data } : {}),
@@ -70,7 +70,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
             ...(surfacePath ? { surfacePath } : {})
         });
 
-        return json(snapshot, {
+        return json(terminal, {
             headers: {
                 'cache-control': 'no-store'
             }

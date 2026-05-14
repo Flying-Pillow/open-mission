@@ -8,7 +8,7 @@ description: Temporary working spec for the typed AgentExecution journal ledger 
 
 ## Temporary Agent Execution Journal Ledger Spec
 
-> Current authority: this temporary spec contains pre-convergence journal-ledger wording. Where it conflicts with `CONTEXT.md`, ADR-0004.08, or ADR-0004.13 as updated on 2026-05-13, follow the newer rule: `AgentExecution` is the canonical in-memory Entity instance; AgentExecution logs are typed audit/recovery records owned by that instance, not a separate canonical execution object.
+> Current authority: this temporary spec contains pre-convergence journal-ledger wording. Where it conflicts with `CONTEXT.md`, ADR-0006.08, or ADR-0006.13 as updated on 2026-05-13, follow the newer rule: `AgentExecution` is the canonical in-memory Entity instance; AgentExecution logs are typed audit/recovery records owned by that instance, not a separate canonical execution object.
 
 This is the temporary working spec for the next AgentExecution journal refactor.
 
@@ -19,9 +19,9 @@ Mission is not recording chat transcript fragments or PTY logs as the primary pr
 ## Authoritative Inputs
 
 - [CONTEXT](../../CONTEXT.md)
-- [ADR-0004.07 Agent Execution Logs As Daemon Audit Material](../adr/0004.07-agent-execution-logs-as-daemon-audit-material.md)
-- [ADR-0004.08 Agent Execution Interaction Journal](../adr/0004.08-agent-execution-interaction-journal.md)
-- [ADR-0004.13 Typed Agent Execution Journal Ledger](../adr/0004.13-typed-agent-execution-journal-ledger.md)
+- [ADR-0006.07 Agent Execution Logs As Daemon Audit Material](../adr/0006.07-agent-execution-logs-as-daemon-audit-material.md)
+- [ADR-0006.08 Agent Execution Interaction Journal](../adr/0006.08-agent-execution-interaction-journal.md)
+- [ADR-0006.13 Typed Agent Execution Journal Ledger](../adr/0006.13-typed-agent-execution-journal-ledger.md)
 - [Agent Execution Interaction Journal Spec](agent-execution-interaction-journal-spec.md)
 
 ## Why This Exists

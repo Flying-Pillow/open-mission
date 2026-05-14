@@ -239,8 +239,8 @@
                 return formatToken(record.effectType);
             case "checkpoint.recorded":
                 return record.detail ?? formatToken(record.checkpointId);
-            case "projection.recorded":
-                return `${formatToken(record.projection)} projection recorded`;
+            case "timeline.recorded":
+                return `${formatToken(record.timeline)} timeline recorded`;
         }
 
         return "Unknown";
@@ -335,8 +335,8 @@
                     formatToken(record.checkpointId),
                     record.detail,
                 ]);
-            case "projection.recorded":
-                return formatToken(record.projection);
+            case "timeline.recorded":
+                return formatToken(record.timeline);
             case "journal.header":
                 return compactParts([
                     record.kind,
@@ -436,7 +436,7 @@
                 ]);
             case "checkpoint.recorded":
                 return compactParts([record.recordId, record.checkpointId]);
-            case "projection.recorded":
+            case "timeline.recorded":
                 return record.recordId;
         }
 

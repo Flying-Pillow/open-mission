@@ -55,6 +55,52 @@ const agentExecution = AgentExecutionSchema.parse({
     ownerId: 'mission-1',
     agentExecutionId: 'agent-execution-1',
     agentId: 'copilot-cli',
+    process: {
+        agentId: 'copilot-cli',
+        agentExecutionId: 'agent-execution-1',
+        scope: {
+            kind: 'task',
+            missionId: 'mission-1',
+            taskId: 'implementation/01',
+            stageId: 'implementation'
+        },
+        workingDirectory: '/mission',
+        taskId: 'implementation/01',
+        missionId: 'mission-1',
+        stageId: 'implementation',
+        status: 'running',
+        attention: 'autonomous',
+        progress: {
+            state: 'working',
+            updatedAt: '2026-05-02T00:00:00.000Z'
+        },
+        waitingForInput: false,
+        acceptsPrompts: true,
+        acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
+        interactionPosture: 'native-terminal-escape-hatch',
+        interactionCapabilities: {
+            mode: 'pty-terminal',
+            canSendTerminalInput: true,
+            canSendStructuredPrompt: false,
+            canSendStructuredCommand: false
+        },
+        transport: {
+            kind: 'terminal',
+            terminalName: 'mission-agent-execution',
+            terminalPaneId: 'terminal_1'
+        },
+        reference: {
+            agentId: 'copilot-cli',
+            agentExecutionId: 'agent-execution-1',
+            transport: {
+                kind: 'terminal',
+                terminalName: 'mission-agent-execution',
+                terminalPaneId: 'terminal_1'
+            }
+        },
+        startedAt: '2026-05-02T00:00:00.000Z',
+        updatedAt: '2026-05-02T00:00:00.000Z'
+    },
     transportId: 'terminal',
     adapterLabel: 'Copilot CLI',
     lifecycleState: 'running',

@@ -10,7 +10,7 @@ import {
     AgentExecutionObservationRecordSchema,
     AgentExecutionFactRecordSchema,
     AgentExecutionOwnerEffectRecordSchema,
-    AgentExecutionProjectionRecordSchema,
+    AgentExecutionTimelineRecordSchema,
     AgentExecutionStateChangedRecordSchema
 } from './AgentExecutionJournalSchema.js';
 
@@ -107,9 +107,9 @@ describe('AgentExecutionJournalSchema', () => {
                 effectType: 'task.execution.updated',
                 workflowEventId: 'workflow-event-1'
             }),
-            AgentExecutionProjectionRecordSchema.parse({
-                ...baseRecord('projection.recorded', 9),
-                projection: 'timeline-item',
+            AgentExecutionTimelineRecordSchema.parse({
+                ...baseRecord('timeline.recorded', 9),
+                timeline: 'timeline-item',
                 payload: {
                     id: 'timeline-item-1',
                     occurredAt: '2026-05-09T00:00:08.000Z',
@@ -145,7 +145,7 @@ describe('AgentExecutionJournalSchema', () => {
             'state.changed',
             'activity.updated',
             'owner-effect.recorded',
-            'projection.recorded'
+            'timeline.recorded'
         ]);
     });
 
@@ -193,12 +193,12 @@ function baseRecord(type: string, sequence: number) {
                         : type === 'agent-execution-fact'
                             ? 'agent-execution-fact'
                             : type,
-        entrySemantics: type === 'activity.updated' || type === 'projection.recorded'
+        entrySemantics: type === 'activity.updated' || type === 'timeline.recorded'
             ? 'snapshot'
             : 'event',
         authority: type === 'turn.accepted' ? 'operator' : 'daemon',
         assertionLevel: type === 'turn.delivery' ? 'informational' : 'authoritative',
-        replayClass: type === 'turn.delivery' || type === 'activity.updated' || type === 'projection.recorded'
+        replayClass: type === 'turn.delivery' || type === 'activity.updated' || type === 'timeline.recorded'
             ? 'replay-optional'
             : 'replay-critical',
         origin: type === 'agent-execution-fact' ? 'filesystem' : 'daemon',

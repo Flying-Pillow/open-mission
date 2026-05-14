@@ -638,7 +638,7 @@ function createAgentExecutionSnapshot(
             canSendStructuredCommand: false
         },
         context: { artifacts: [], instructions: [] },
-        projection: { timelineItems: [] },
+        timeline: { timelineItems: [] },
         supportedMessages: [],
         ...overrides
     };

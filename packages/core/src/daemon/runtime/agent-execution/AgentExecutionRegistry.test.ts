@@ -169,7 +169,7 @@ function installEntry(
         executionsByAgentExecutionId: Map<string, unknown>;
     }).executionsByAgentExecutionId.set(input.agentExecutionId, {
         ownerKey: input.ownerKey,
-        agentExecutor: {
+        agentExecutionCoordinator: {
             terminateExecution: input.terminateExecution ?? vi.fn().mockResolvedValue(undefined),
             dispose: vi.fn()
         },

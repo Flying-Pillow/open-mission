@@ -46,7 +46,7 @@ export function createDraftWorkflowRuntimeState(
             paused: false
         },
         stages: configuration.workflow.stageOrder.map((stageId, index) =>
-            createEmptyStageProjection(stageId, index === 0 ? 'ready' : 'pending')
+            createEmptyStageTimeline(stageId, index === 0 ? 'ready' : 'pending')
         ),
         tasks: [],
         agentExecutions: [],
@@ -140,7 +140,7 @@ function toEventRecord(event: WorkflowEvent): WorkflowEventRecord {
     };
 }
 
-function createEmptyStageProjection(stageId: MissionStageId, lifecycle: 'pending' | 'ready') {
+function createEmptyStageTimeline(stageId: MissionStageId, lifecycle: 'pending' | 'ready') {
     return {
         stageId,
         lifecycle,

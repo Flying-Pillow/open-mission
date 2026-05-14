@@ -17,9 +17,9 @@ import {
 import {
     AgentExecutionObservationLedger,
     AgentExecutionObservationPolicy
-} from '../../../entities/AgentExecution/runtime/AgentExecutionObservationPolicy.js';
-import { deriveActivityStateFromProgressState } from '../../../entities/AgentExecution/state/AgentExecutionActivitySemantics.js';
-import type { AgentAdapter } from './AgentAdapter.js';
+} from '../../../entities/AgentExecution/policy/AgentExecutionObservationPolicy.js';
+import { deriveActivityStateFromProgressState } from '../../../entities/AgentExecution/semantics/AgentExecutionActivitySemantics.js';
+import type { AgentAdapter } from './adapter/AgentAdapter.js';
 import { AgentExecutionObservationRouter } from './signals/AgentExecutionObservationRouter.js';
 
 export const AGENT_EXECUTION_IDLE_QUIET_PERIOD_MS = 1_500;

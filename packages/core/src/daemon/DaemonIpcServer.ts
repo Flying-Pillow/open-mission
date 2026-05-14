@@ -32,18 +32,18 @@ import {
 	type Response
 } from './protocol/contracts.js';
 import { DaemonLogger } from './runtime/DaemonLogger.js';
-import type { AgentRuntimeDisposable } from './runtime/agent/events.js';
+import type { AgentRuntimeDisposable } from './runtime/agent-execution/events.js';
 import { TerminalRegistry } from '../entities/Terminal/TerminalRegistry.js';
 import { DaemonRuntimeSupervisor } from './runtime/DaemonRuntimeSupervisor.js';
 import { DaemonSurrealStore } from './runtime/DaemonSurrealStore.js';
 import { CodeIntelligenceService } from './runtime/code-intelligence/CodeIntelligenceService.js';
-import { getDefaultAgentExecutionRegistry, type AgentExecutionRegistry } from './runtime/agent/AgentExecutionRegistry.js';
+import { getDefaultAgentExecutionRegistry, type AgentExecutionRegistry } from './runtime/agent-execution/AgentExecutionRegistry.js';
 import {
 	OpenMissionMcpRegisterAccessInputSchema,
 	OpenMissionMcpCallToolInputSchema,
 	OpenMissionMcpListToolsInputSchema,
 	OpenMissionMcpServer
-} from './runtime/agent/mcp/OpenMissionMcpServer.js';
+} from './runtime/agent-execution/mcp/OpenMissionMcpServer.js';
 
 export type OpenMissionDaemonHandle = {
 	manifest: Manifest;

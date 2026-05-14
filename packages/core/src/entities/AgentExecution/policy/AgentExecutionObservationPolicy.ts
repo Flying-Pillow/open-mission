@@ -12,12 +12,12 @@ import {
 	type AgentExecutionInputChoice,
 	type AgentExecutionSignal,
 	type AgentExecutionSignalDecision,
-	type AgentExecutionType
+	type AgentExecutionProcess
 } from '../protocol/AgentExecutionProtocolTypes.js';
 import {
 	deriveAttentionFromStatusSignalPhase,
 	deriveLifecycleStateFromStatusSignalPhase
-} from '../state/AgentExecutionActivitySemantics.js';
+} from '../semantics/AgentExecutionActivitySemantics.js';
 import { projectAgentExecutionObservationSignalToTimelineItem } from '../protocol/AgentExecutionSignalRegistry.js';
 
 export class AgentExecutionObservationLedger {
@@ -52,7 +52,7 @@ export class AgentExecutionObservationPolicy {
 	}
 
 	public evaluate(input: {
-		execution: AgentExecutionType;
+		execution: AgentExecutionProcess;
 		observation: AgentExecutionObservation;
 	}): AgentExecutionSignalDecision {
 		const rejection = this.validateObservation(input.execution, input.observation);
@@ -64,7 +64,7 @@ export class AgentExecutionObservationPolicy {
 	}
 
 	private validateObservation(
-		execution: AgentExecutionType,
+		execution: AgentExecutionProcess,
 		observation: AgentExecutionObservation
 	): string | undefined {
 		if (!observation.observationId.trim()) {
@@ -110,7 +110,7 @@ export class AgentExecutionObservationPolicy {
 		return validateSignalShape(observation.signal);
 	}
 
-	private decide(snapshot: AgentExecutionType, observation: AgentExecutionObservation): AgentExecutionSignalDecision {
+	private decide(snapshot: AgentExecutionProcess, observation: AgentExecutionObservation): AgentExecutionSignalDecision {
 		const signal = observation.signal;
 		const preservesInputRequest = hasActiveInputRequest(snapshot);
 		switch (signal.type) {
@@ -390,7 +390,7 @@ function isPromotableProgressSignal(
 		&& signal.confidence !== 'diagnostic';
 }
 
-function hasActiveInputRequest(snapshot: AgentExecutionType): boolean {
+function hasActiveInputRequest(snapshot: AgentExecutionProcess): boolean {
 	return snapshot.currentInputRequestId !== undefined && snapshot.currentInputRequestId !== null;
 }
 
@@ -492,7 +492,7 @@ function validateObservationPayloadBoundary(observation: AgentExecutionObservati
 }
 
 function validateAgentExecutionLifecycleBoundary(
-	snapshot: AgentExecutionType,
+	snapshot: AgentExecutionProcess,
 	observation: AgentExecutionObservation
 ): string | undefined {
 	if (snapshot.status !== 'completed' && snapshot.status !== 'failed') {

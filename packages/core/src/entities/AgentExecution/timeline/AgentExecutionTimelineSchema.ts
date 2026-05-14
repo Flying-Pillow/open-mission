@@ -9,7 +9,7 @@ import {
     AgentExecutionActivityTargetSchema,
     AgentExecutionAttentionStateSchema,
     AgentExecutionLifecycleStateSchema
-} from './AgentExecutionStateSchema.js';
+} from '../AgentExecutionStateSchema.js';
 
 export const AgentExecutionTimelineZoneSchema = z.enum(['conversation', 'activity', 'workflow', 'runtime', 'artifact']);
 export const AgentExecutionTimelineSeveritySchema = z.enum(['info', 'success', 'warning', 'error', 'critical']);
@@ -92,7 +92,7 @@ export const AgentExecutionTimelineItemSchema = z.object({
     payload: AgentExecutionTimelinePayloadSchema
 }).strict();
 
-export const AgentExecutionActivityProjectionSchema = z.object({
+export const AgentExecutionTimelineActivitySchema = z.object({
     lifecycleState: AgentExecutionLifecycleStateSchema.optional(),
     attention: AgentExecutionAttentionStateSchema.optional(),
     activity: AgentExecutionActivityStateSchema.optional(),
@@ -104,7 +104,7 @@ export const AgentExecutionActivityProjectionSchema = z.object({
     updatedAt: z.string().trim().min(1)
 }).strict();
 
-export const AgentExecutionAttentionProjectionSchema = z.object({
+export const AgentExecutionTimelineAttentionSchema = z.object({
     state: AgentExecutionAttentionStateSchema,
     primitive: z.enum(['attention.input-request', 'attention.blocked', 'attention.verification-requested', 'attention.verification-result']),
     severity: AgentExecutionTimelineSeveritySchema.optional(),
@@ -116,12 +116,12 @@ export const AgentExecutionAttentionProjectionSchema = z.object({
     updatedAt: z.string().trim().min(1)
 }).strict();
 
-export const AgentExecutionLiveOverlayProjectionSchema = z.object({ items: z.array(AgentExecutionTimelineItemSchema) }).strict();
-export const AgentExecutionProjectionSchema = z.object({
+export const AgentExecutionLiveTimelineOverlaySchema = z.object({ items: z.array(AgentExecutionTimelineItemSchema) }).strict();
+export const AgentExecutionTimelineSchema = z.object({
     timelineItems: z.array(AgentExecutionTimelineItemSchema),
-    currentActivity: AgentExecutionActivityProjectionSchema.optional(),
-    currentAttention: AgentExecutionAttentionProjectionSchema.optional(),
-    liveOverlay: AgentExecutionLiveOverlayProjectionSchema.optional()
+    currentActivity: AgentExecutionTimelineActivitySchema.optional(),
+    currentAttention: AgentExecutionTimelineAttentionSchema.optional(),
+    liveOverlay: AgentExecutionLiveTimelineOverlaySchema.optional()
 }).strict();
 
 export type AgentExecutionTimelineZoneType = z.infer<typeof AgentExecutionTimelineZoneSchema>;
@@ -131,7 +131,7 @@ export type AgentExecutionRenderBehaviorType = z.infer<typeof AgentExecutionRend
 export type AgentExecutionTimelineProvenanceType = z.infer<typeof AgentExecutionTimelineProvenanceSchema>;
 export type AgentExecutionTimelinePayloadType = z.infer<typeof AgentExecutionTimelinePayloadSchema>;
 export type AgentExecutionTimelineItemType = z.infer<typeof AgentExecutionTimelineItemSchema>;
-export type AgentExecutionActivityProjectionType = z.infer<typeof AgentExecutionActivityProjectionSchema>;
-export type AgentExecutionAttentionProjectionType = z.infer<typeof AgentExecutionAttentionProjectionSchema>;
-export type AgentExecutionLiveOverlayProjectionType = z.infer<typeof AgentExecutionLiveOverlayProjectionSchema>;
-export type AgentExecutionProjectionType = z.infer<typeof AgentExecutionProjectionSchema>;
+export type AgentExecutionTimelineActivityType = z.infer<typeof AgentExecutionTimelineActivitySchema>;
+export type AgentExecutionTimelineAttentionType = z.infer<typeof AgentExecutionTimelineAttentionSchema>;
+export type AgentExecutionLiveTimelineOverlayType = z.infer<typeof AgentExecutionLiveTimelineOverlaySchema>;
+export type AgentExecutionTimelineType = z.infer<typeof AgentExecutionTimelineSchema>;

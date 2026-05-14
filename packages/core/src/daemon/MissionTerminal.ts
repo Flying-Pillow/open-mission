@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { TerminalRegistry, type TerminalHandle, type TerminalSnapshot } from '../entities/Terminal/TerminalRegistry.js';
-import { AgentRuntimeEventEmitter } from './runtime/agent/events.js';
+import { AgentRuntimeEventEmitter } from './runtime/agent-execution/events.js';
 import type { MissionSelector } from '../entities/Mission/MissionSchema.js';
 import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
 import type {

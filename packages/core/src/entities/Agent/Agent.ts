@@ -1,5 +1,5 @@
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
-import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
+import type { AgentAdapter } from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
 import {
     agentEntityName,
     AgentAdapterDiagnosticsSchema,
@@ -80,7 +80,7 @@ export class Agent extends Entity<AgentType, string> {
         const workingDirectory = input.workingDirectory ?? repositoryRootPath;
         const registry = await loadAgentRegistry(repositoryRootPath);
         const agent = registry.requireAgent(input.agentId);
-        const { AgentConnectionTester } = await import('../../daemon/runtime/agent/AgentConnectionTester.js');
+        const { AgentConnectionTester } = await import('../../daemon/runtime/agent-execution/AgentConnectionTester.js');
         const tester = new AgentConnectionTester();
         return AgentConnectionTestResultSchema.parse(await tester.test({
             agent,

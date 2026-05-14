@@ -1,4 +1,4 @@
-import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import type { AgentLaunchConfig } from '../../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import {
     type AgentAdapterProcessOutput,
     type AgentAdapterTerminalOptions,
@@ -8,7 +8,7 @@ import {
     getStringField,
     parseJsonLine
 } from '../AgentAdapter.js';
-import { provisionAgentExecutionMcpConfig } from '../mcp/AgentExecutionMcpProvisioner.js';
+import { provisionAgentExecutionMcpConfig } from '../../mcp/AgentExecutionMcpProvisioner.js';
 
 const CLAUDE_CODE_AGENT_ID = 'claude-code' as const;
 

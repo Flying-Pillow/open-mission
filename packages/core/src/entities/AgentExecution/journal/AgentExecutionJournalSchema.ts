@@ -7,7 +7,7 @@ import {
     AgentExecutionCapabilityStateSchema,
     AgentExecutionLifecycleStateSchema,
     AgentExecutionTransportStateSchema
-} from '../state/AgentExecutionStateSchema.js';
+} from '../AgentExecutionStateSchema.js';
 import {
     AgentExecutionProtocolDescriptorSchema,
     AgentExecutionProtocolOwnerEntitySchema
@@ -94,7 +94,7 @@ export const AgentExecutionJournalRecordFamilySchema = z.enum([
     'activity.updated',
     'owner-effect.recorded',
     'checkpoint.recorded',
-    'projection.recorded'
+    'timeline.recorded'
 ]);
 
 export const AgentExecutionJournalRecordAuthoritySchema = z.enum([
@@ -131,7 +131,7 @@ export const AgentExecutionJournalOriginSchema = z.enum([
     'terminal-heuristic',
     'filesystem',
     'git',
-    'projection'
+    'timeline'
 ]);
 
 export const AgentExecutionJournalRecordTypeSchema = z.enum([
@@ -147,7 +147,7 @@ export const AgentExecutionJournalRecordTypeSchema = z.enum([
     'activity.updated',
     'owner-effect.recorded',
     'checkpoint.recorded',
-    'projection.recorded'
+    'timeline.recorded'
 ]);
 
 export const AgentExecutionJournalRecordBaseSchema = z.object({
@@ -377,11 +377,11 @@ export const AgentExecutionCheckpointRecordSchema = AgentExecutionJournalRecordB
     payload: journalPayloadSchema.optional()
 }).strict();
 
-export const AgentExecutionProjectionRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
-    type: z.literal('projection.recorded'),
-    family: z.literal('projection.recorded'),
+export const AgentExecutionTimelineRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
+    type: z.literal('timeline.recorded'),
+    family: z.literal('timeline.recorded'),
     entrySemantics: z.literal('snapshot'),
-    projection: z.literal('timeline-item'),
+    timeline: z.literal('timeline-item'),
     payload: journalPayloadSchema
 }).strict();
 
@@ -398,7 +398,7 @@ export const AgentExecutionJournalRecordSchema = z.discriminatedUnion('type', [
     AgentExecutionActivityUpdatedRecordSchema,
     AgentExecutionOwnerEffectRecordSchema,
     AgentExecutionCheckpointRecordSchema,
-    AgentExecutionProjectionRecordSchema
+    AgentExecutionTimelineRecordSchema
 ]);
 
 export const AgentExecutionJournalReferenceSchema = z.object({
@@ -444,7 +444,7 @@ export type AgentExecutionStateChangedRecordType = z.infer<typeof AgentExecution
 export type AgentExecutionActivityUpdatedRecordType = z.infer<typeof AgentExecutionActivityUpdatedRecordSchema>;
 export type AgentExecutionOwnerEffectRecordType = z.infer<typeof AgentExecutionOwnerEffectRecordSchema>;
 export type AgentExecutionCheckpointRecordType = z.infer<typeof AgentExecutionCheckpointRecordSchema>;
-export type AgentExecutionProjectionRecordType = z.infer<typeof AgentExecutionProjectionRecordSchema>;
+export type AgentExecutionTimelineRecordType = z.infer<typeof AgentExecutionTimelineRecordSchema>;
 export type AgentExecutionJournalRecordType = z.infer<typeof AgentExecutionJournalRecordSchema>;
 export type AgentExecutionJournalReferenceType = z.infer<typeof AgentExecutionJournalReferenceSchema>;
 

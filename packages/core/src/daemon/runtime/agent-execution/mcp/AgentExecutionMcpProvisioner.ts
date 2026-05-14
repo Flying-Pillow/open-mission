@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
-import type { AgentAdapterLaunchPreparation, AgentExecutionMcpAccess } from '../AgentAdapter.js';
+import type { AgentAdapterLaunchPreparation, AgentExecutionMcpAccess } from '../adapter/AgentAdapter.js';
 
 export type AgentExecutionMcpBridge = {
     command: string;

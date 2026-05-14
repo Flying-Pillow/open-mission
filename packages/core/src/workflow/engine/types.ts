@@ -147,7 +147,7 @@ export const WorkflowTaskLaunchRequestSchema = z.object({
 
 export type WorkflowTaskLaunchRequest = z.infer<typeof WorkflowTaskLaunchRequestSchema>;
 
-export const WorkflowStageRuntimeProjectionSchema = z.object({
+export const WorkflowStageRuntimeTimelineSchema = z.object({
     stageId: nonEmptyStringSchema,
     lifecycle: z.enum(MISSION_STAGE_DERIVED_STATES),
     taskIds: z.array(nonEmptyStringSchema),
@@ -159,7 +159,7 @@ export const WorkflowStageRuntimeProjectionSchema = z.object({
     completedAt: nonEmptyStringSchema.optional()
 }).strict();
 
-export type WorkflowStageRuntimeProjection = z.infer<typeof WorkflowStageRuntimeProjectionSchema>;
+export type WorkflowStageRuntimeTimeline = z.infer<typeof WorkflowStageRuntimeTimelineSchema>;
 
 export const AgentExecutionRuntimeStateSchema = z.object({
     agentExecutionId: nonEmptyStringSchema,
@@ -180,7 +180,7 @@ export const AgentExecutionRuntimeStateSchema = z.object({
 
 export type AgentExecutionRuntimeState = z.infer<typeof AgentExecutionRuntimeStateSchema>;
 
-export const WorkflowGateProjectionSchema = z.object({
+export const WorkflowGateTimelineSchema = z.object({
     gateId: nonEmptyStringSchema,
     intent: z.enum(['implement', 'verify', 'audit', 'deliver']),
     state: z.enum(['blocked', 'passed']),
@@ -189,7 +189,7 @@ export const WorkflowGateProjectionSchema = z.object({
     updatedAt: nonEmptyStringSchema
 }).strict();
 
-export type WorkflowGateProjection = z.infer<typeof WorkflowGateProjectionSchema>;
+export type WorkflowGateTimeline = z.infer<typeof WorkflowGateTimelineSchema>;
 
 export type {
     WorkflowExecutionSettings,
@@ -217,10 +217,10 @@ export const WorkflowRuntimeStateSchema = z.object({
     lifecycle: z.enum(MISSION_LIFECYCLE_STATES),
     activeStageId: nonEmptyStringSchema.optional(),
     pause: WorkflowPauseStateSchema,
-    stages: z.array(WorkflowStageRuntimeProjectionSchema),
+    stages: z.array(WorkflowStageRuntimeTimelineSchema),
     tasks: z.array(WorkflowTaskRuntimeStateSchema),
     agentExecutions: z.array(AgentExecutionRuntimeStateSchema),
-    gates: z.array(WorkflowGateProjectionSchema),
+    gates: z.array(WorkflowGateTimelineSchema),
     launchQueue: z.array(WorkflowTaskLaunchRequestSchema),
     updatedAt: nonEmptyStringSchema
 }).strict();

@@ -20,7 +20,7 @@ import {
     resolveTaskMaxReworkIterations,
     resolveDependentTaskIds
 } from './policy.js';
-import { deriveWorkflowProjectionState } from './projection.js';
+import { deriveWorkflowTimelineState } from './projection.js';
 
 export class DefaultWorkflowReducer implements WorkflowReducer {
     public reduce(
@@ -443,11 +443,11 @@ class WorkflowDerivationEngine {
     public derive(): void {
         const event = this.event;
         enforceLifecycleInvariants(this.state, this.configuration, event.occurredAt);
-        applyDerivedWorkflowProjectionState(this.state, this.configuration, event.occurredAt);
+        applyDerivedWorkflowTimelineState(this.state, this.configuration, event.occurredAt);
         if (!this.suppressAutostart) {
             queueAutostartTasks(this.state, event, this.configuration, this.requests);
         }
-        applyDerivedWorkflowProjectionState(this.state, this.configuration, event.occurredAt);
+        applyDerivedWorkflowTimelineState(this.state, this.configuration, event.occurredAt);
 
         if (this.state.lifecycle !== 'delivered' && isMissionCompleted(this.state, this.configuration)) {
             if (this.state.lifecycle !== 'completed') {
@@ -641,12 +641,12 @@ function isInactiveAgentExecutionLifecycleEvent(
     }
 }
 
-function applyDerivedWorkflowProjectionState(
+function applyDerivedWorkflowTimelineState(
     state: WorkflowRuntimeState,
     configuration: WorkflowConfigurationSnapshot,
     occurredAt: string
 ): void {
-    const derived = deriveWorkflowProjectionState(state, configuration, occurredAt);
+    const derived = deriveWorkflowTimelineState(state, configuration, occurredAt);
     state.tasks = derived.tasks;
     state.stages = derived.stages;
     state.gates = derived.gates;

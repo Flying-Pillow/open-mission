@@ -2,7 +2,7 @@ import * as net from 'node:net';
 import {
 	AgentRuntimeEventEmitter,
 	type AgentRuntimeDisposable
-} from '../runtime/agent/events.js';
+} from '../runtime/agent-execution/events.js';
 import type { EntityEventEnvelopeType } from '../../entities/Entity/EntitySchema.js';
 import { METHOD_METADATA } from '../protocol/contracts.js';
 import type {

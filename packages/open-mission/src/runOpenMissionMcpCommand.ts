@@ -15,7 +15,7 @@ import {
 import {
     readAgentExecutionSemanticOperationDescriptor,
     readAgentExecutionSemanticOperationInputSchema
-} from '@flying-pillow/open-mission-core/daemon/runtime/agent/AgentExecutionSemanticOperations';
+} from '@flying-pillow/open-mission-core/daemon/runtime/agent-execution/AgentExecutionSemanticOperations';
 import { z } from 'zod/v4';
 import type { EntryContext } from './entryContext.js';
 

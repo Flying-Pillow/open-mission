@@ -3,7 +3,7 @@ import type {
 } from '../../workflow/engine/types.js';
 import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
-import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
+import type { AgentAdapter } from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
 import type { AgentExecutionType } from '../AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionLaunchRequestType } from '../AgentExecution/AgentExecutionSchema.js';
 import type { AgentRegistry } from '../Agent/AgentRegistry.js';

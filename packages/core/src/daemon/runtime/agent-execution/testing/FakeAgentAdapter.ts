@@ -1,5 +1,5 @@
 import type { AgentExecution } from '../../../../entities/AgentExecution/AgentExecution.js';
-import { AgentAdapter } from '../AgentAdapter.js';
+import { AgentAdapter } from '../adapter/AgentAdapter.js';
 import type {
 	AgentCommand,
 	AgentLaunchConfig,
@@ -43,14 +43,14 @@ type Patch = Omit<Partial<AgentExecutionType>, 'failureMessage'> & {
 	failureMessage?: string | undefined;
 };
 
-type FakeAgentExecutionRecord = {
+type FakeAgentExecutionState = {
 	execution: AgentExecutionType;
 	listeners: Set<(event: AgentExecutionEvent) => void>;
 };
 
 export class FakeAgentAdapter extends AgentAdapter {
 	private readonly agentExecutionIds = new Set<string>();
-	private readonly records = new Map<string, FakeAgentExecutionRecord>();
+	private readonly records = new Map<string, FakeAgentExecutionState>();
 	private readonly startRequests: FakeAgentStartRequest[] = [];
 	private nextAgentExecutionId = 0;
 
@@ -364,7 +364,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 		return cloneExecution(record.execution);
 	}
 
-	private requireRecord(agentExecutionId: string): FakeAgentExecutionRecord {
+	private requireRecord(agentExecutionId: string): FakeAgentExecutionState {
 		const record = this.records.get(agentExecutionId);
 		if (!record) {
 			throw new Error(`Fake agent execution '${agentExecutionId}' is not attached.`);

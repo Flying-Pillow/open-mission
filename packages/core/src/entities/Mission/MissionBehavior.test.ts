@@ -9,9 +9,8 @@ import { Repository } from '../Repository/Repository.js';
 import { Agent } from '../Agent/Agent.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { DaemonLogger } from '../../daemon/runtime/DaemonLogger.js';
-import { FakeAgentAdapter } from '../../daemon/runtime/agent/testing/FakeAgentAdapter.js';
-import type { AgentExecutionStateType } from '../AgentExecution/AgentExecutionSchema.js';
-import { AgentExecutionCommandIds } from '../AgentExecution/AgentExecutionSchema.js';
+import { FakeAgentAdapter } from '../../daemon/runtime/agent-execution/testing/FakeAgentAdapter.js';
+import { AgentExecutionCommandIds, type AgentExecutionType } from '../AgentExecution/AgentExecutionSchema.js';
 import { TaskCommandIds } from '../Task/TaskSchema.js';
 import { Mission } from './Mission.js';
 import { MissionCommandIds } from './MissionSchema.js';
@@ -75,14 +74,14 @@ describe('Mission', () => {
                 const events: string[] = [];
                 const agentMessages: string[] = [];
                 const consoleLines: string[] = [];
-                const agentExecutionStateChanges: AgentExecutionStateType[] = [];
+                const agentExecutionStateChanges: AgentExecutionType[] = [];
                 mission.onDidAgentEvent((event) => {
                     events.push(event.type);
                     if (event.type === 'agent-message') {
                         agentMessages.push(event.text);
                     }
-                    if (event.type === 'agent-execution-state-changed') {
-                        agentExecutionStateChanges.push(event.state);
+                    if (event.type === 'agent-execution-changed') {
+                        agentExecutionStateChanges.push(event.execution);
                     }
                 });
                 mission.onDidAgentConsoleEvent((event) => {
@@ -97,30 +96,30 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task and mission working directory after workflow start.');
                 }
 
-                const agentExecutionRecord = await mission.launchAgentExecution({
+                const agentExecutionData = await mission.launchAgentExecution({
                     agentId: agentAdapter.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Complete the assigned task.'
                 });
                 expect(await agentAdapter.listExecutions()).toHaveLength(1);
-                const execution = agentAdapter.getAgentExecution(agentExecutionRecord.agentExecutionId);
+                const execution = agentAdapter.getAgentExecution(agentExecutionData.agentExecutionId);
                 if (!execution) {
-                    throw new Error(`Expected fake adapter execution '${agentExecutionRecord.agentExecutionId}' to exist.`);
+                    throw new Error(`Expected fake adapter execution '${agentExecutionData.agentExecutionId}' to exist.`);
                 }
 
                 execution.emitMessage('adapter output', 'stdout');
                 execution.emitAwaitingInput();
                 await flushMicrotasks();
 
-                const consoleState = mission.getAgentConsoleState(agentExecutionRecord.agentExecutionId);
-                expect(agentExecutionRecord).toMatchObject({
+                const consoleState = mission.getAgentConsoleState(agentExecutionData.agentExecutionId);
+                expect(agentExecutionData).toMatchObject({
                     taskId,
                     agentId: agentAdapter.id,
                     assignmentLabel: expect.stringContaining('01-PRD/tasks/')
                 });
                 expect(events).toEqual(
-                    expect.arrayContaining(['agent-execution-started', 'agent-message', 'agent-execution-state-changed'])
+                    expect.arrayContaining(['agent-execution-started', 'agent-message', 'agent-execution-changed'])
                 );
                 expect(agentMessages).toContain('adapter output');
                 expect(consoleLines).toContain('adapter output');
@@ -1049,7 +1048,7 @@ describe('Mission', () => {
 
                 try {
                     const missionData = await reloaded.buildMission();
-                    const migratedAgentExecution = missionData.agentExecutions.find((execution: AgentExecutionStateType) => execution.agentExecutionId === launched.agentExecutionId);
+                    const migratedAgentExecution = missionData.agentExecutions.find((execution) => execution.agentExecutionId === launched.agentExecutionId);
                     expect(migratedAgentExecution).toMatchObject({
                         agentId: 'copilot-cli',
                         transportId: 'terminal'
@@ -1106,7 +1105,7 @@ describe('Mission', () => {
                 };
 
                 const missionData = await mission.buildMission();
-                expect(missionData.agentExecutions.find((execution: AgentExecutionStateType) => execution.agentExecutionId === launched.agentExecutionId)).toMatchObject({
+                expect(missionData.agentExecutions.find((execution) => execution.agentExecutionId === launched.agentExecutionId)).toMatchObject({
                     agentExecutionId: launched.agentExecutionId,
                     agentId: agentAdapter.id,
                     lifecycleState: 'running'

@@ -1,16 +1,16 @@
-import type { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
+import type { AgentExecution } from '../../../../entities/AgentExecution/AgentExecution.js';
 import type {
     AgentCommand,
     AgentExecutionReference,
     AgentExecutionProcess,
     AgentLaunchConfig,
     AgentPrompt
-} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type {
     AgentExecutionProtocolDescriptorType,
-} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolSchema.js';
-import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/state/AgentExecutionStateSchema.js';
-import type { SharedTerminalRegistryOptions } from '../../../entities/Terminal/TerminalRegistry.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolSchema.js';
+import type { AgentExecutionTransportStateType } from '../../../../entities/AgentExecution/AgentExecutionStateSchema.js';
+import type { SharedTerminalRegistryOptions } from '../../../../entities/Terminal/TerminalRegistry.js';
 
 export type AgentExecutionProcessDriver = {
     readonly execution: AgentExecution;

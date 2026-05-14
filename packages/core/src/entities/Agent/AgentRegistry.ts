@@ -1,5 +1,5 @@
-import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
-import { agentAdapterInputs } from '../../daemon/runtime/agent/adapters/index.js';
+import type { AgentAdapter } from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
+import { agentAdapterInputs } from '../../daemon/runtime/agent-execution/adapter/adapters/index.js';
 import { Agent } from './Agent.js';
 import { Repository } from '../Repository/Repository.js';
 import {
@@ -11,7 +11,7 @@ import {
     createAgentAdapter,
     type AgentInput,
     type AgentAdapterSettingsResolver
-} from '../../daemon/runtime/agent/AgentAdapter.js';
+} from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
 
 export type AgentRegistryOptions = {
     agents: Agent[];

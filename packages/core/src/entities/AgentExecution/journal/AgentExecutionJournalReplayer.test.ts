@@ -4,11 +4,11 @@ import {
     hydrateAgentExecutionDataFromJournal,
     replayAgentExecutionJournal
 } from './AgentExecutionJournalReplayer.js';
-import { AgentExecutionSchema, type AgentExecutionType } from '../AgentExecutionSchema.js';
+import { AgentExecutionSchema, type AgentExecutionProcessType, type AgentExecutionType } from '../AgentExecutionSchema.js';
 import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSchema.js';
 
 describe('AgentExecutionJournalReplayer', () => {
-    it('replays timeline projection and processed ids from semantic journal records', () => {
+    it('replays timeline timeline and processed ids from semantic journal records', () => {
         const replay = replayAgentExecutionJournal([
             createHeaderRecord(),
             {
@@ -78,14 +78,14 @@ describe('AgentExecutionJournalReplayer', () => {
 
         expect([...replay.processedMessageIds]).toEqual(['message-1']);
         expect([...replay.processedObservationIds]).toEqual(['observation-1']);
-        expect(replay.projection.timelineItems).toEqual([
+        expect(replay.timeline.timelineItems).toEqual([
             expect.objectContaining({ id: 'message-1', primitive: 'conversation.operator-message', payload: expect.objectContaining({ text: 'Continue.' }) }),
             expect.objectContaining({ id: 'observation-1', primitive: 'activity.progress', payload: expect.objectContaining({ text: 'Working through the next slice.' }) }),
             expect.objectContaining({ id: 'fact-1', primitive: 'activity.tool', payload: expect.objectContaining({ title: 'Reading artifact', path: 'BRIEF.md' }) }),
             expect.objectContaining({ id: 'record-4:state', primitive: 'workflow.state-changed' }),
             expect.objectContaining({ id: 'record-5:activity', primitive: 'activity.progress' })
         ]);
-        expect(replay.projection.currentActivity).toEqual({
+        expect(replay.timeline.currentActivity).toEqual({
             lifecycleState: 'running',
             attention: 'awaiting-operator',
             activity: 'reviewing',
@@ -103,7 +103,7 @@ describe('AgentExecutionJournalReplayer', () => {
             activeToolName: 'apply_patch',
             updatedAt: '2026-05-09T00:00:05.000Z'
         });
-        expect(replay.projection.currentAttention).toEqual({
+        expect(replay.timeline.currentAttention).toEqual({
             state: 'awaiting-operator',
             primitive: 'attention.input-request',
             currentInputRequestId: 'observation-2',
@@ -147,12 +147,13 @@ describe('AgentExecutionJournalReplayer', () => {
         });
     });
 
-    it('hydrates AgentExecution data from the journal projection', () => {
+    it('hydrates AgentExecution data from the journal timeline', () => {
         const baseData = AgentExecutionSchema.parse({
             id: 'agent_execution:mission-1/agent-execution-1',
             ownerId: 'mission-1',
             agentExecutionId: 'agent-execution-1',
             agentId: 'copilot-cli',
+            process: createAgentExecutionProcess(),
             adapterLabel: 'Copilot CLI',
             lifecycleState: 'running',
             interactionCapabilities: {
@@ -169,7 +170,7 @@ describe('AgentExecutionJournalReplayer', () => {
                 taskId: 'task-1'
             },
             agentJournalPath: 'agent-journals/agent-execution-1.interaction.jsonl',
-            projection: { timelineItems: [] }
+            timeline: { timelineItems: [] }
         } satisfies Partial<AgentExecutionType>);
 
         const hydrated = hydrateAgentExecutionDataFromJournal(baseData, [
@@ -222,7 +223,7 @@ describe('AgentExecutionJournalReplayer', () => {
             },
             updatedAt: '2026-05-09T00:00:03.000Z'
         });
-        expect(hydrated.projection.timelineItems).toEqual([
+        expect(hydrated.timeline.timelineItems).toEqual([
             expect.objectContaining({ id: 'message-1', primitive: 'conversation.system-message', payload: expect.objectContaining({ text: 'Start here.' }) }),
             expect.objectContaining({ id: 'record-2:state', primitive: 'workflow.state-changed' }),
             expect.objectContaining({ id: 'record-3:activity', primitive: 'activity.progress' })
@@ -235,6 +236,7 @@ describe('AgentExecutionJournalReplayer', () => {
             ownerId: 'mission-1',
             agentExecutionId: 'agent-execution-1',
             agentId: 'copilot-cli',
+            process: createAgentExecutionProcess(),
             adapterLabel: 'Copilot CLI',
             lifecycleState: 'running',
             activityState: 'executing',
@@ -246,7 +248,7 @@ describe('AgentExecutionJournalReplayer', () => {
             },
             context: { artifacts: [], instructions: [] },
             supportedMessages: [],
-            projection: { timelineItems: [] }
+            timeline: { timelineItems: [] }
         } satisfies Partial<AgentExecutionType>);
 
         const hydrated = hydrateAgentExecutionDataFromJournal(baseData, [
@@ -270,7 +272,7 @@ describe('AgentExecutionJournalReplayer', () => {
 
         expect(hydrated.activityState).toBe('awaiting-agent-response');
         expect(hydrated.liveActivity).toBeUndefined();
-        expect(hydrated.projection.currentActivity).toEqual({
+        expect(hydrated.timeline.currentActivity).toEqual({
             lifecycleState: 'running',
             attention: 'autonomous',
             activity: 'awaiting-agent-response',
@@ -321,7 +323,7 @@ describe('AgentExecutionJournalReplayer', () => {
             }
         ]);
 
-        expect(replay.projection.currentAttention).toEqual({
+        expect(replay.timeline.currentAttention).toEqual({
             state: 'awaiting-operator',
             primitive: 'attention.input-request',
             title: 'Needs input',
@@ -374,7 +376,7 @@ describe('AgentExecutionJournalReplayer', () => {
         ]);
 
         expect(replay.currentInputRequestId).toBeNull();
-        expect(replay.projection.currentAttention).toEqual({
+        expect(replay.timeline.currentAttention).toEqual({
             state: 'awaiting-operator',
             primitive: 'attention.blocked',
             currentInputRequestId: null,
@@ -404,6 +406,43 @@ function createHeaderRecord(): AgentExecutionJournalRecordType {
     };
 }
 
+function createAgentExecutionProcess(): AgentExecutionProcessType {
+    return {
+        agentId: 'copilot-cli',
+        agentExecutionId: 'agent-execution-1',
+        scope: {
+            kind: 'task',
+            missionId: 'mission-1',
+            taskId: 'task-1'
+        },
+        workingDirectory: '/repo',
+        taskId: 'task-1',
+        missionId: 'mission-1',
+        status: 'running',
+        attention: 'autonomous',
+        progress: {
+            state: 'working',
+            updatedAt: '2026-05-09T00:00:00.000Z'
+        },
+        waitingForInput: false,
+        acceptsPrompts: true,
+        acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
+        interactionPosture: 'structured-headless',
+        interactionCapabilities: {
+            mode: 'agent-message',
+            canSendTerminalInput: false,
+            canSendStructuredPrompt: true,
+            canSendStructuredCommand: true
+        },
+        reference: {
+            agentId: 'copilot-cli',
+            agentExecutionId: 'agent-execution-1'
+        },
+        startedAt: '2026-05-09T00:00:00.000Z',
+        updatedAt: '2026-05-09T00:00:00.000Z'
+    };
+}
+
 function baseRecord<TType extends AgentExecutionJournalRecordType['type']>(
     type: TType,
     sequence: number
@@ -423,12 +462,12 @@ function baseRecord<TType extends AgentExecutionJournalRecordType['type']>(
                         : type === 'agent-execution-fact'
                             ? 'agent-execution-fact'
                             : type,
-        entrySemantics: type === 'activity.updated' || type === 'projection.recorded'
+        entrySemantics: type === 'activity.updated' || type === 'timeline.recorded'
             ? 'snapshot'
             : 'event',
         authority: type === 'turn.accepted' ? 'operator' : 'daemon',
         assertionLevel: type === 'turn.delivery' ? 'informational' : 'authoritative',
-        replayClass: type === 'turn.delivery' || type === 'activity.updated' || type === 'projection.recorded'
+        replayClass: type === 'turn.delivery' || type === 'activity.updated' || type === 'timeline.recorded'
             ? 'replay-optional'
             : 'replay-critical',
         origin: type === 'agent-execution-fact' ? 'filesystem' : 'daemon',

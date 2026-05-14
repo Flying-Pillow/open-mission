@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentAdapterProcessOutput } from '../AgentAdapter.js';
+import type { AgentAdapterProcessOutput } from '../adapter/AgentAdapter.js';
 import {
 	cloneSignal,
 	cloneObservationAddress,

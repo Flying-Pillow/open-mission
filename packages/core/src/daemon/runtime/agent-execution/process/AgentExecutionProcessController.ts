@@ -1,17 +1,17 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
+import { AgentExecution } from '../../../../entities/AgentExecution/AgentExecution.js';
 import type {
     AgentCommand,
     AgentExecutionProcess,
     AgentPrompt,
     AgentTaskContext
-} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import {
     deriveAgentExecutionInteractionCapabilities,
     getAgentExecutionScopeMissionId,
     getAgentExecutionScopeStageId,
     getAgentExecutionScopeTaskId
-} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionProcessDriver, AgentExecutionTerminalStartOptions } from './AgentExecutionProcessDriver.js';
 import { createAgentExecutionLiveOptions } from './AgentExecutionProcessDriver.js';
 

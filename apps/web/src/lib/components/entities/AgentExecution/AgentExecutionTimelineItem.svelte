@@ -5,7 +5,7 @@
     import AttentionTimelineItem from "$lib/components/entities/AgentExecution/AttentionTimelineItem.svelte";
     import ArtifactTimelineItem from "$lib/components/entities/AgentExecution/ArtifactTimelineItem.svelte";
     import ConversationTimelineItem from "$lib/components/entities/AgentExecution/ConversationTimelineItem.svelte";
-    import RuntimeTimelineItem from "$lib/components/entities/AgentExecution/RuntimeTimelineItem.svelte";
+    import AgentExecutionLiveTimelineItem from "/components/entities/AgentExecution/AgentExecutionLiveTimelineItem.svelte";
     import WorkflowTimelineItem from "$lib/components/entities/AgentExecution/WorkflowTimelineItem.svelte";
 
     type TimelineItem =
@@ -63,7 +63,7 @@
         active={isCurrentActionItem}
     />
 {:else if item.behavior.class === "runtime-warning" || item.behavior.class === "terminal"}
-    <RuntimeTimelineItem
+    <AgentExecutionLiveTimelineItem
         {item}
         {openArtifactIds}
         {onSelectArtifact}

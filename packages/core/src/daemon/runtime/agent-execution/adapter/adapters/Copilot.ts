@@ -1,12 +1,12 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import type { AgentLaunchConfig } from '../../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import {
     type AgentInput,
     type AgentExecutionMcpAccess,
     type AgentAdapterTerminalOptions
 } from '../AgentAdapter.js';
-import { provisionAgentExecutionMcpConfig } from '../mcp/AgentExecutionMcpProvisioner.js';
+import { provisionAgentExecutionMcpConfig } from '../../mcp/AgentExecutionMcpProvisioner.js';
 
 const COPILOT_AGENT_ID = 'copilot-cli' as const;
 
