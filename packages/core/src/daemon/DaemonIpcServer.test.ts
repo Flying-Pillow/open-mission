@@ -93,7 +93,7 @@ describe('minimal source daemon request handling', () => {
         }
     });
 
-    it('starts a repository-scoped SurrealDB runtime store under .mission', async () => {
+    it('starts code intelligence against the repository-owned SurrealDB database', async () => {
         const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-surreal-workspace-'));
         const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-surreal-runtime-'));
         const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];

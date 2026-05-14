@@ -369,6 +369,14 @@ export function createEntityId(table: string, uniqueId: string): EntityIdType {
 	return EntityIdSchema.parse(`${normalizedTable}:${normalizedUniqueId}`);
 }
 
+export function createEntityIdentitySegment(value: string): string {
+	return value
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+}
+
 export function createEntityChannel(entityId: EntityIdType | string, eventName: string): EntityChannelType {
 	const normalizedEntityId = EntityIdSchema.parse(entityId);
 	const normalizedEventName = EntityEventAddressSchema.shape.eventName.parse(eventName);

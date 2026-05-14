@@ -15,7 +15,7 @@ type CodeIgnoreScope = {
     matcher: Ignore;
 };
 
-const ENFORCED_SKIPPED_ROOT_NAMES = new Set(['.git', '.mission']);
+const ENFORCED_SKIPPED_ROOT_NAMES = new Set(['.git', '.open-mission']);
 
 const MAX_INDEXED_FILE_SIZE_BYTES = 1_000_000;
 

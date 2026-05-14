@@ -43,11 +43,11 @@ import type {
 	AgentExecutionId,
 	AgentExecutionReference,
 	AgentExecutionType
-} from '../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+} from '../../entities/AgentExecution/AgentExecutionSchema.js';
 import {
 	isTerminalFinalStatus,
 	type AgentExecutionSignalDecision
-} from '../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+} from '../../entities/AgentExecution/AgentExecutionSchema.js';
 
 type RuntimeAgentExecutionHandle = {
 	execution: AgentExecution;
@@ -231,13 +231,7 @@ export class WorkflowRequestExecutor {
 										: {})
 						};
 						const launchConfig: AgentLaunchConfig = {
-							scope: {
-								kind: 'task',
-								missionId: input.missionId,
-								taskId: task.taskId,
-								stageId: task.stageId,
-								repositoryRootPath: Repository.getRepositoryRootFromMissionDir(input.descriptor.missionDir)
-							},
+							ownerId: task.taskId,
 							workingDirectory:
 								typeof request.payload['workingDirectory'] === 'string' && request.payload['workingDirectory'].trim()
 									? request.payload['workingDirectory'].trim()

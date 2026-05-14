@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
+import { createEntityIdentitySegment, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityClassCommandViewType, type EntityCommandViewType } from '../Entity/EntitySchema.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { getDefaultAgentExecutionRegistry } from '../../daemon/runtime/agent-execution/AgentExecutionRegistry.js';
@@ -161,7 +161,7 @@ type RepositorySettingsDocumentReadOptions = {
 
 export class Repository extends Entity<RepositoryDataType, string> {
 	public static override readonly entityName = repositoryEntityName;
-	public static readonly missionDirectoryName = '.mission';
+	public static readonly missionDirectoryName = '.open-mission';
 	public static readonly defaultMissionsRoot = 'missions';
 	public static readonly missionWorkflowDirectoryName = 'workflow';
 	public static readonly missionWorkflowDefinitionFileName = 'workflow.json';
@@ -253,10 +253,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			ownerKey: Repository.createSystemAgentExecutionOwnerKey(repositoriesRootPath),
 			agentRegistry,
 			config: {
-				scope: {
-					kind: 'system',
-					label: '/repositories'
-				},
+				ownerId: Repository.createSystemAgentExecutionOwnerKey(repositoriesRootPath),
 				workingDirectory: repositoriesRootPath,
 				specification: {
 					summary: 'Manage the repositories surface for Open Mission.',
@@ -516,11 +513,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public static slugIdentitySegment(value: string): string {
-		return value
-			.trim()
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-+|-+$/g, '');
+		return createEntityIdentitySegment(value);
 	}
 
 	public static getMissionDirectoryPath(repositoryRootPath: string): string {
@@ -582,14 +575,14 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	): string {
 		const githubRepository = resolveGitHubRepositoryFromRepositoryRoot(repositoryRootPath);
 		if (githubRepository) {
-			const [owner, repository] = githubRepository
+			const [scope, repository] = githubRepository
 				.split('/')
 				.map((segment) => segment.trim())
 				.filter((segment) => segment.length > 0);
 			if (owner && repository) {
 				return path.join(
 					Repository.resolveMissionsRoot(options.missionsRoot),
-					owner,
+					scope,
 					repository
 				);
 			}
@@ -1266,10 +1259,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			ownerKey,
 			agentRegistry,
 			config: {
-				scope: {
-					kind: 'repository',
-					repositoryRootPath: this.repositoryRootPath
-				},
+				ownerId: ownerKey,
 				workingDirectory: this.repositoryRootPath,
 				specification: {
 					summary: `Manage repository ${this.platformRepositoryRef ?? this.repoName}.`,
@@ -1357,10 +1347,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			ownerKey: Repository.createRepositoryAgentExecutionOwnerKey(this.repositoryRootPath),
 			agentRegistry,
 			config: {
-				scope: {
-					kind: 'repository',
-					repositoryRootPath: this.repositoryRootPath
-				},
+				ownerId: Repository.createRepositoryAgentExecutionOwnerKey(this.repositoryRootPath),
 				workingDirectory: this.repositoryRootPath,
 				specification: {
 					summary: `Manage repository ${this.platformRepositoryRef ?? this.repoName}.`,
@@ -2276,8 +2263,8 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	private static normalizeGitHubRepositoryName(value: string | undefined): string | undefined {
-		const [owner, repository, ...rest] = value?.trim().split('/').map((segment) => segment.trim()) ?? [];
-		if (!owner || !repository || rest.length > 0) {
+		const [scope, repository, ...rest] = value?.trim().split('/').map((segment) => segment.trim()) ?? [];
+		if (!scope || !repository || rest.length > 0) {
 			return undefined;
 		}
 		return `${owner}/${repository}`;
@@ -2305,8 +2292,8 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			'',
 			`- Branch: \`${input.branchRef}\``,
 			`- Base: \`${input.baseBranch}\``,
-			'- Creates `.mission/settings.json` for Repository control settings.',
-			'- Creates `.mission/workflow/workflow.json` and the default workflow template preset.',
+			'- Creates `.open-mission/settings.json` for Repository control settings.',
+			'- Creates `.open-mission/workflow/workflow.json` and the default workflow template preset.',
 			'- Leaves Mission dossiers to future Mission branches.',
 			'',
 			'After this PR merges, update the local default branch before starting missions.'

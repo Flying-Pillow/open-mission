@@ -9,7 +9,7 @@ describe('CodeIndexer', () => {
         const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-code-indexer-'));
         await fs.mkdir(path.join(rootPath, 'src'), { recursive: true });
         await fs.mkdir(path.join(rootPath, 'node_modules', 'ignored'), { recursive: true });
-        await fs.mkdir(path.join(rootPath, '.mission', 'runtime'), { recursive: true });
+        await fs.mkdir(path.join(rootPath, '.open-mission', 'runtime'), { recursive: true });
         await fs.mkdir(path.join(rootPath, 'dist'), { recursive: true });
         await fs.writeFile(path.join(rootPath, '.gitignore'), [
             'node_modules/',
@@ -28,7 +28,7 @@ describe('CodeIndexer', () => {
         await fs.writeFile(path.join(rootPath, 'README.md'), '# Example\n');
         await fs.writeFile(path.join(rootPath, 'asset.bin'), Buffer.from([0, 159, 146, 150]));
         await fs.writeFile(path.join(rootPath, 'node_modules', 'ignored', 'module.ts'), 'export const ignored = true;');
-        await fs.writeFile(path.join(rootPath, '.mission', 'runtime', 'generated.ts'), 'export const generated = true;');
+        await fs.writeFile(path.join(rootPath, '.open-mission', 'runtime', 'generated.ts'), 'export const generated = true;');
         await fs.writeFile(path.join(rootPath, 'dist', 'bundle.js'), 'export const bundled = true;');
 
         try {

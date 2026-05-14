@@ -1,6 +1,5 @@
-import { Surreal } from 'surrealdb';
-import { createNodeEngines } from '@surrealdb/node';
 import { describe, expect, it } from 'vitest';
+import { SurrealDatabase } from '../../../lib/database/SurrealDatabase.js';
 import { compileCodeGraphSurql } from './CodeGraphSchema.js';
 
 type TableInfo = {
@@ -10,9 +9,7 @@ type TableInfo = {
 
 describe('Code graph schema', () => {
     it('compiles code graph physical storage schemas into DDL accepted by embedded SurrealDB', async () => {
-        const db = new Surreal({ engines: createNodeEngines() });
-        await db.connect('mem://');
-        await db.use({ namespace: 'mission_code_graph_schema_test', database: 'code_intelligence' });
+        const db = SurrealDatabase.inMemory();
 
         try {
             await db.query(compileCodeGraphSurql());
@@ -40,7 +37,7 @@ describe('Code graph schema', () => {
                 'target'
             ]));
         } finally {
-            await db.close();
+            await db.stop();
         }
     });
 });

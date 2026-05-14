@@ -5,13 +5,77 @@ import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { Repository } from './Repository.js';
 import { createDefaultRepositorySettings, RepositoryDataSchema } from './RepositorySchema.js';
-import { AgentExecutionSchema } from '../AgentExecution/AgentExecutionSchema.js';
+import { AgentExecutionSchema, type AgentExecutionType } from '../AgentExecution/AgentExecutionSchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import { resolveRepositoriesRoot } from '../../settings/OpenMissionInstall.js';
 import { writeOpenMissionConfig } from '../../settings/OpenMissionInstall.js';
 import type { EntityExecutionContext } from '../Entity/Entity.js';
 import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 import { createInitialWorkflowRuntimeState, createWorkflowStateData, createWorkflowConfigurationSnapshot } from '../../workflow/engine/index.js';
+
+type LegacyAgentExecutionAddress = { kind: string;[key: string]: unknown };
+
+function createTestAgentExecution(input: {
+    id: string;
+    ownerId: string;
+    agentExecutionId: string;
+    agentId: string;
+    scope: LegacyAgentExecutionAddress;
+}): AgentExecutionType {
+    const updatedAt = '2026-05-14T10:00:00.000Z';
+    const progress = { state: 'working' as const, updatedAt };
+    const interactionCapabilities = {
+        mode: 'agent-message' as const,
+        canSendTerminalInput: false,
+        canSendStructuredPrompt: true,
+        canSendStructuredCommand: true
+    };
+    return AgentExecutionSchema.parse({
+        id: input.id,
+        ownerId: input.ownerId,
+        agentExecutionId: input.agentExecutionId,
+        agentId: input.agentId,
+        process: {
+            agentId: input.agentId,
+            agentExecutionId: input.agentExecutionId,
+            scope: input.scope,
+            workingDirectory: input.ownerId,
+            status: 'running',
+            progress,
+            waitingForInput: false,
+            acceptsPrompts: true,
+            acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
+            interactionPosture: 'structured-headless',
+            interactionCapabilities,
+            reference: {
+                agentId: input.agentId,
+                agentExecutionId: input.agentExecutionId
+            },
+            startedAt: updatedAt,
+            updatedAt
+        },
+        adapterLabel: 'Test Agent',
+        lifecycleState: 'running',
+        interactionCapabilities,
+        context: {
+            artifacts: [],
+            instructions: []
+        },
+        supportedMessages: [],
+        scope: input.scope,
+        progress,
+        waitingForInput: false,
+        acceptsPrompts: true,
+        acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
+        interactionPosture: 'structured-headless',
+        reference: {
+            agentId: input.agentId,
+            agentExecutionId: input.agentExecutionId
+        },
+        createdAt: updatedAt,
+        lastUpdatedAt: updatedAt
+    });
+}
 
 describe('Repository', () => {
     it('opens a local repository with default configuration', () => {
@@ -166,7 +230,7 @@ describe('Repository', () => {
             await Repository.initializeScaffolding(repositoryRootPath, {
                 settings: createDefaultRepositorySettings()
             });
-            git(repositoryRootPath, ['add', '.mission']);
+            git(repositoryRootPath, ['add', '.open-mission']);
             git(repositoryRootPath, ['commit', '-m', 'setup']);
             git(repositoryRootPath, ['push']);
 
@@ -232,7 +296,7 @@ describe('Repository', () => {
     it('treats an invalid legacy settings document as Repository setup state', async () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-legacy-settings-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
-        const settingsPath = path.join(repositoryRootPath, '.mission', 'settings.json');
+        const settingsPath = path.join(repositoryRootPath, '.open-mission', 'settings.json');
         const repository = Repository.create({
             repositoryRootPath,
             platformRepositoryRef: 'Flying-Pillow/example'
@@ -265,7 +329,7 @@ describe('Repository', () => {
     it('surfaces an out-of-date workflow definition as recoverable invalid control state', async () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-legacy-workflow-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
-        const workflowPath = path.join(repositoryRootPath, '.mission', 'workflow', 'workflow.json');
+        const workflowPath = path.join(repositoryRootPath, '.open-mission', 'workflow', 'workflow.json');
         const repository = Repository.create({
             repositoryRootPath,
             platformRepositoryRef: 'Flying-Pillow/example'
@@ -320,7 +384,7 @@ describe('Repository', () => {
     it('returns updated repository settings even when the workflow definition is invalid', async () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-invalid-workflow-settings-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
-        const workflowPath = path.join(repositoryRootPath, '.mission', 'workflow', 'workflow.json');
+        const workflowPath = path.join(repositoryRootPath, '.open-mission', 'workflow', 'workflow.json');
         const repository = Repository.create({
             repositoryRootPath,
             platformRepositoryRef: 'Flying-Pillow/example'
@@ -544,24 +608,11 @@ describe('Repository', () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-setup-agent-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
         const settings = createDefaultRepositorySettings();
-        const execution = AgentExecutionSchema.parse({
+        const execution = createTestAgentExecution({
             id: 'agent_execution:setup-test',
             ownerId: repositoryRootPath,
             agentExecutionId: 'setup-test',
             agentId: settings.agentAdapter,
-            adapterLabel: 'Test Agent',
-            lifecycleState: 'running',
-            interactionCapabilities: {
-                mode: 'agent-message',
-                canSendTerminalInput: false,
-                canSendStructuredPrompt: true,
-                canSendStructuredCommand: true
-            },
-            context: {
-                artifacts: [],
-                instructions: []
-            },
-            supportedMessages: [],
             scope: {
                 kind: 'repository',
                 repositoryRootPath
@@ -614,24 +665,11 @@ describe('Repository', () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-stale-setup-agent-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
         const settings = createDefaultRepositorySettings();
-        const execution = AgentExecutionSchema.parse({
+        const execution = createTestAgentExecution({
             id: 'agent_execution:stale-setup-test',
             ownerId: repositoryRootPath,
             agentExecutionId: 'stale-setup-test',
             agentId: settings.agentAdapter,
-            adapterLabel: 'Test Agent',
-            lifecycleState: 'running',
-            interactionCapabilities: {
-                mode: 'agent-message',
-                canSendTerminalInput: false,
-                canSendStructuredPrompt: true,
-                canSendStructuredCommand: true
-            },
-            context: {
-                artifacts: [],
-                instructions: []
-            },
-            supportedMessages: [],
             scope: {
                 kind: 'repository',
                 repositoryRootPath
@@ -667,24 +705,11 @@ describe('Repository', () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-reuse-agent-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
         const settings = createDefaultRepositorySettings();
-        const execution = AgentExecutionSchema.parse({
+        const execution = createTestAgentExecution({
             id: 'agent_execution:setup-test',
             ownerId: repositoryRootPath,
             agentExecutionId: 'setup-test',
             agentId: settings.agentAdapter,
-            adapterLabel: 'Test Agent',
-            lifecycleState: 'running',
-            interactionCapabilities: {
-                mode: 'agent-message',
-                canSendTerminalInput: false,
-                canSendStructuredPrompt: true,
-                canSendStructuredCommand: true
-            },
-            context: {
-                artifacts: [],
-                instructions: []
-            },
-            supportedMessages: [],
             scope: {
                 kind: 'repository',
                 repositoryRootPath
@@ -733,24 +758,11 @@ describe('Repository', () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-refresh-agent-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
         const settings = createDefaultRepositorySettings();
-        const execution = AgentExecutionSchema.parse({
+        const execution = createTestAgentExecution({
             id: 'agent_execution:refresh-test',
             ownerId: repositoryRootPath,
             agentExecutionId: 'refresh-test',
             agentId: settings.agentAdapter,
-            adapterLabel: 'Test Agent',
-            lifecycleState: 'running',
-            interactionCapabilities: {
-                mode: 'agent-message',
-                canSendTerminalInput: false,
-                canSendStructuredPrompt: true,
-                canSendStructuredCommand: true
-            },
-            context: {
-                artifacts: [],
-                instructions: []
-            },
-            supportedMessages: [],
             scope: {
                 kind: 'repository',
                 repositoryRootPath
@@ -851,24 +863,11 @@ describe('Repository', () => {
             defaultAgentAdapter: 'copilot-cli',
             enabledAgentAdapters: []
         });
-        const execution = AgentExecutionSchema.parse({
+        const execution = createTestAgentExecution({
             id: 'agent_execution:repositories-system',
             ownerId: '/repositories',
             agentExecutionId: 'repositories-system',
             agentId: 'copilot-cli',
-            adapterLabel: 'Test Agent',
-            lifecycleState: 'running',
-            interactionCapabilities: {
-                mode: 'agent-message',
-                canSendTerminalInput: false,
-                canSendStructuredPrompt: true,
-                canSendStructuredCommand: true
-            },
-            context: {
-                artifacts: [],
-                instructions: []
-            },
-            supportedMessages: [],
             scope: {
                 kind: 'system',
                 label: '/repositories'
@@ -914,7 +913,7 @@ describe('Repository', () => {
             git(tempRoot, ['init', repositoryRootPath]);
             await fsp.writeFile(path.join(repositoryRootPath, 'README.md'), 'initial\n', 'utf8');
             await Repository.initializeScaffolding(repositoryRootPath, { settings });
-            git(repositoryRootPath, ['add', 'README.md', '.mission']);
+            git(repositoryRootPath, ['add', 'README.md', '.open-mission']);
             git(repositoryRootPath, ['commit', '-m', 'initial']);
             git(repositoryRootPath, ['branch', '-M', 'main']);
             git(repositoryRootPath, ['remote', 'add', 'origin', remoteRootPath]);
@@ -935,7 +934,7 @@ describe('Repository', () => {
                 entity: 'Repository',
                 method: 'startMissionFromBrief'
             });
-            await expect(fsp.stat(path.join(missionWorktreePath, '.mission', 'settings.json'))).resolves.toBeDefined();
+            await expect(fsp.stat(path.join(missionWorktreePath, '.open-mission', 'settings.json'))).resolves.toBeDefined();
             expect(git(missionWorktreePath, ['status', '--porcelain'])).toBe('');
         } finally {
             await fsp.rm(tempRoot, { recursive: true, force: true });
@@ -945,7 +944,7 @@ describe('Repository', () => {
     it('rejects an existing Mission dossier with stale runtime data during start', async () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-existing-stale-runtime-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
-        const missionDir = path.join(repositoryRootPath, '.mission', 'missions', '1-initial-setup');
+        const missionDir = path.join(repositoryRootPath, '.open-mission', 'missions', '1-initial-setup');
         const repository = Repository.create({ repositoryRootPath });
         const repositoryInternals = repository as unknown as {
             assertExistingMissionRuntimeDataValid(
@@ -1166,14 +1165,14 @@ describe('Repository', () => {
             expect(data.id).toMatch(/^repository:local\/created-repository\/[a-f0-9]{8}$/u);
             expect(data.repositoryRootPath).toBe(repositoryRootPath);
             expect(data.isInitialized).toBe(true);
-            await expect(fsp.access(path.join(repositoryRootPath, '.mission', 'settings.json'))).resolves.toBeUndefined();
-            expect(git(repositoryRootPath, ['ls-tree', '-r', '--name-only', 'HEAD', '--', '.mission']).split(/\r?\n/u)).toEqual(expect.arrayContaining([
-                '.mission/settings.json',
-                '.mission/workflow/workflow.json'
+            await expect(fsp.access(path.join(repositoryRootPath, '.open-mission', 'settings.json'))).resolves.toBeUndefined();
+            expect(git(repositoryRootPath, ['ls-tree', '-r', '--name-only', 'HEAD', '--', '.open-mission']).split(/\r?\n/u)).toEqual(expect.arrayContaining([
+                '.open-mission/settings.json',
+                '.open-mission/workflow/workflow.json'
             ]));
-            expect(git(repositoryRootPath, ['ls-tree', '-r', '--name-only', 'origin/main', '--', '.mission']).split(/\r?\n/u)).toEqual(expect.arrayContaining([
-                '.mission/settings.json',
-                '.mission/workflow/workflow.json'
+            expect(git(repositoryRootPath, ['ls-tree', '-r', '--name-only', 'origin/main', '--', '.open-mission']).split(/\r?\n/u)).toEqual(expect.arrayContaining([
+                '.open-mission/settings.json',
+                '.open-mission/workflow/workflow.json'
             ]));
         } finally {
             createPlatformRepositorySpy.mockRestore();
@@ -1420,7 +1419,7 @@ describe('Repository', () => {
             git(tempRoot, ['init', repositoryRootPath]);
             await fsp.writeFile(path.join(repositoryRootPath, 'README.md'), 'initial\n', 'utf8');
             await Repository.initializeScaffolding(repositoryRootPath, { settings });
-            git(repositoryRootPath, ['add', 'README.md', '.mission']);
+            git(repositoryRootPath, ['add', 'README.md', '.open-mission']);
             git(repositoryRootPath, ['commit', '-m', 'initial']);
             git(repositoryRootPath, ['branch', '-M', 'main']);
             git(repositoryRootPath, ['remote', 'add', 'origin', remoteRootPath]);
@@ -1437,7 +1436,7 @@ describe('Repository', () => {
             const missionWorktreesPath = path.join(missionsRoot, 'example');
             const missionWorktreePath = path.join(missionWorktreesPath, missionStart.id);
 
-            await expect(fsp.stat(path.join(missionWorktreePath, '.mission', 'settings.json'))).resolves.toBeDefined();
+            await expect(fsp.stat(path.join(missionWorktreePath, '.open-mission', 'settings.json'))).resolves.toBeDefined();
 
             await expect(repository.remove({
                 id: repository.id,
@@ -1477,7 +1476,7 @@ describe('Repository', () => {
             git(repositoryRootPath, ['remote', 'add', 'origin', remoteRootPath]);
             git(repositoryRootPath, ['push', '--set-upstream', 'origin', 'main']);
             await Repository.initializeScaffolding(repositoryRootPath, { settings });
-            git(repositoryRootPath, ['add', '.mission']);
+            git(repositoryRootPath, ['add', '.open-mission']);
             git(repositoryRootPath, ['commit', '-m', 'setup']);
             git(repositoryRootPath, ['push']);
 

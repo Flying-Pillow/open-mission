@@ -1,222 +1,436 @@
 import { z } from 'zod/v4';
+import { field, table } from '@flying-pillow/zod-surreal';
 import {
     EntityCommandAcknowledgementSchema,
+    EntityIdSchema,
     EntitySchema,
-    EntityStorageSchema
+    EntityStorageSchema,
+    IdSchema
 } from '../Entity/EntitySchema.js';
-import {
-    agentExecutionEntityName,
-    AgentExecutionCommandIdSchema,
-    AgentExecutionContextArtifactRoleSchema,
-    AgentExecutionEventSubjectSchema,
-    AgentExecutionInteractionCapabilitiesSchema,
-    AgentExecutionInteractionPostureSchema,
-    AgentExecutionMessageDescriptorSchema,
-    AgentExecutionProtocolDescriptorSchema,
-    AgentExecutionScopeSchema
-} from './protocol/AgentExecutionProtocolSchema.js';
-import {
-    AgentExecutionActivityStateSchema,
-    AgentExecutionAttentionStateSchema,
-    AgentExecutionLifecycleStateSchema,
-    AgentExecutionProgressSchema,
-    AgentExecutionPermissionRequestSchema,
-    AgentExecutionSupportedCommandTypeSchema,
-    AgentExecutionLiveActivitySchema,
-    AgentExecutionTelemetrySchema,
-    AgentExecutionTransportStateSchema
-} from './AgentExecutionStateSchema.js';
-import { AgentExecutionTimelineSchema } from './timeline/AgentExecutionTimelineSchema.js';
-import {
-    AgentExecutionReferenceSchema,
-    AgentExecutionTerminalTransportSchema,
-    AgentExecutionTerminalHandleSchema,
-    AgentExecutionTerminalRecordingPathSchema
-} from './transport/AgentExecutionTerminalSchema.js';
 
-export * from './transport/AgentExecutionTerminalSchema.js';
-export * from './AgentExecutionStateSchema.js';
-export * from './protocol/AgentExecutionProtocolSchema.js';
-export * from './protocol/AgentExecutionSemanticOperationSchema.js';
-export * from './timeline/AgentExecutionTimelineSchema.js';
+export const agentExecutionEntityName = 'AgentExecution' as const;
+export const agentExecutionTableName = 'agent_execution' as const;
+export const agentExecutionJournalTableName = 'agent_execution_journal' as const;
 
-export const AgentExecutionJournalPathSchema = z.string()
-    .trim()
-    .min(1)
-    .refine((value) => /^agent-journals\/[^/]+\.interaction\.jsonl$/u.test(value), {
-        message: 'AgentExecution journals must use agent-journals/<agentExecutionId>.interaction.jsonl.'
-    });
-
-export const AgentExecutionContextArtifactSchema = z.object({
-    id: z.string().trim().min(1),
-    role: AgentExecutionContextArtifactRoleSchema,
-    order: z.number().int().nonnegative(),
-    title: z.string().trim().min(1).optional()
-}).strict();
-
-export const AgentExecutionContextInstructionSchema = z.object({
-    instructionId: z.string().trim().min(1),
-    text: z.string(),
-    order: z.number().int().nonnegative()
-}).strict();
-
-export const AgentExecutionContextSchema = z.object({
-    artifacts: z.array(AgentExecutionContextArtifactSchema),
-    instructions: z.array(AgentExecutionContextInstructionSchema)
-}).strict();
-
-export const AgentExecutionTurnRequestSchema = z.object({
-    workingDirectory: z.string().trim().min(1),
-    prompt: z.string(),
-    scope: AgentExecutionScopeSchema.optional(),
-    title: z.string().trim().min(1).optional(),
-    operatorIntent: z.string().trim().min(1).optional(),
-    startFreshAgentExecution: z.boolean().optional()
-}).strict();
-
-export const AgentExecutionConsoleStateSchema = z.object({
-    title: z.string().trim().min(1).optional(),
-    lines: z.array(z.string()),
-    promptOptions: z.array(z.string()).nullable(),
-    awaitingInput: z.boolean(),
-    agentId: z.string().trim().min(1).optional(),
-    adapterLabel: z.string().trim().min(1).optional(),
-    agentExecutionId: z.string().trim().min(1).optional()
-}).strict();
-
-export const AgentExecutionConsoleEventSchema = z.discriminatedUnion('type', [
-    z.object({ type: z.literal('reset'), state: AgentExecutionConsoleStateSchema }).strict(),
-    z.object({ type: z.literal('lines'), lines: z.array(z.string()), state: AgentExecutionConsoleStateSchema }).strict(),
-    z.object({ type: z.literal('prompt'), state: AgentExecutionConsoleStateSchema }).strict()
+export const AgentExecutionOwnerEntitySchema = z.enum([
+    'System',
+    'Repository',
+    'Mission',
+    'Task',
+    'Artifact'
 ]);
 
-export const AgentExecutionLaunchRequestSchema = AgentExecutionTurnRequestSchema.extend({
-    agentId: z.string().trim().min(1),
-    terminalName: z.string().trim().min(1).optional(),
-    transportId: z.string().trim().min(1).optional(),
-    agentExecutionId: z.string().trim().min(1).optional(),
-    taskId: z.string().trim().min(1).optional(),
-    assignmentLabel: z.string().trim().min(1).optional()
+export const AgentExecutionOwnerReferenceSchema = z.object({
+    ownerEntity: AgentExecutionOwnerEntitySchema,
+    ownerId: IdSchema
 }).strict();
 
-export const AgentExecutionProcessSchema = z.object({
-    agentId: z.string().trim().min(1),
-    agentExecutionId: z.string().trim().min(1),
-    scope: AgentExecutionScopeSchema,
-    workingDirectory: z.string().trim().min(1),
-    taskId: z.string().trim().min(1).optional(),
-    missionId: z.string().trim().min(1).optional(),
-    stageId: z.string().trim().min(1).optional(),
-    status: AgentExecutionLifecycleStateSchema,
-    attention: AgentExecutionAttentionStateSchema.optional(),
-    currentInputRequestId: z.string().trim().min(1).nullable().optional(),
-    progress: AgentExecutionProgressSchema,
-    waitingForInput: z.boolean(),
-    acceptsPrompts: z.boolean(),
-    acceptedCommands: z.array(AgentExecutionSupportedCommandTypeSchema),
-    interactionPosture: AgentExecutionInteractionPostureSchema,
-    interactionCapabilities: AgentExecutionInteractionCapabilitiesSchema,
-    transport: AgentExecutionTerminalTransportSchema.optional(),
-    reference: AgentExecutionReferenceSchema,
-    startedAt: z.string().trim().min(1),
-    updatedAt: z.string().trim().min(1),
-    failureMessage: z.string().trim().min(1).optional(),
-    endedAt: z.string().trim().min(1).optional()
+export const AgentExecutionLifecycleStateSchema = z.enum([
+    'starting',
+    'running',
+    'paused',
+    'completed',
+    'failed',
+    'cancelled',
+    'terminated'
+]);
+
+export const AgentExecutionAttentionStateSchema = z.enum([
+    'none',
+    'autonomous',
+    'awaiting-operator',
+    'awaiting-system',
+    'blocked'
+]);
+
+export const AgentExecutionActivityStateSchema = z.enum([
+    'idle',
+    'awaiting-agent-response',
+    'planning',
+    'reasoning',
+    'communicating',
+    'editing',
+    'executing',
+    'testing',
+    'reviewing'
+]);
+
+export const AgentExecutionMessageDirectionSchema = z.enum(['incoming', 'outgoing']);
+
+export const AgentExecutionMessageDeliverySchema = z.enum([
+    'none',
+    'best-effort',
+    'required',
+    'terminal-only'
+]);
+
+export const AgentExecutionCommandPortabilitySchema = z.enum([
+    'mission-native',
+    'cross-agent',
+    'adapter-scoped',
+    'terminal-only'
+]);
+
+export const AgentExecutionJournalEffectSchema = z.enum([
+    'none',
+    'append',
+    'mutate'
+]);
+
+export const AgentExecutionMessageDescriptorSchema = z.object({
+    direction: AgentExecutionMessageDirectionSchema.clone().register(field, {
+        description: 'Direction of the AgentExecution message.'
+    }),
+    kind: z.string().trim().min(1).register(field, {
+        description: 'Message kind handled by this AgentExecution.'
+    }),
+    delivery: AgentExecutionMessageDeliverySchema.clone().register(field, {
+        description: 'Required delivery behavior for this message kind.'
+    }),
+    payloadSchemaKey: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Optional schema key for structured message payload validation.'
+    }),
+    label: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Optional operator-facing message label.'
+    }),
+    description: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Optional operator-facing message description.'
+    }),
+    startsTurn: z.boolean().optional().register(field, {
+        optional: true,
+        description: 'Whether accepting this message starts an AgentExecution turn.'
+    }),
+    portability: AgentExecutionCommandPortabilitySchema.optional().register(field, {
+        optional: true,
+        description: 'Portability scope for this message kind.'
+    }),
+    journalEffect: AgentExecutionJournalEffectSchema.default('append').register(field, {
+        description: 'Durable journal effect produced by this message kind.'
+    })
+}).strict();
+
+export const AgentExecutionMessageRegistrySchema = z.object({
+    messages: z.array(AgentExecutionMessageDescriptorSchema).register(field, {
+        description: 'Structured message descriptors supported by this AgentExecution.'
+    })
+}).strict();
+
+export const AgentExecutionStructuredTransportSchema = z.enum([
+    'none',
+    'stdout-marker',
+    'mcp-tool',
+    'provider-structured'
+]);
+
+export const AgentExecutionTransportStatusSchema = z.enum([
+    'available',
+    'degraded',
+    'unavailable',
+    'recovering'
+]);
+
+export const AgentExecutionTransportStateSchema = z.object({
+    status: AgentExecutionTransportStatusSchema.clone().register(field, {
+        description: 'Current transport availability status.'
+    }),
+    structuredTransport: AgentExecutionStructuredTransportSchema.clone().register(field, {
+        description: 'Structured transport currently available to this AgentExecution.'
+    }),
+    terminalInputAvailable: z.boolean().optional().register(field, {
+        optional: true,
+        description: 'Whether terminal input is currently available as a fallback transport.'
+    }),
+    reason: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Current transport degradation or unavailability reason.'
+    })
+}).strict();
+
+export const AgentExecutionMcpAvailabilitySchema = z.enum(['available', 'unavailable']);
+
+export const AgentExecutionJournalReferenceSchema = z.object({
+    journalId: IdSchema.clone().register(field, {
+        description: 'Durable journal identity for this AgentExecution.'
+    }),
+    ownerEntity: AgentExecutionOwnerEntitySchema.clone().register(field, {
+        description: 'Canonical Entity type that owns the AgentExecution journal.'
+    }),
+    ownerId: IdSchema.clone().register(field, {
+        description: 'Canonical id of the Entity that owns the AgentExecution journal.'
+    }),
+    agentExecutionId: IdSchema.clone().register(field, {
+        description: 'AgentExecution identity associated with this journal.'
+    }),
+    recordCount: z.number().int().nonnegative().default(0).register(field, {
+        description: 'Number of durable journal records currently known.'
+    }),
+    lastSequence: z.number().int().nonnegative().default(0).register(field, {
+        description: 'Last durable journal record sequence currently known.'
+    }),
+    storageKey: IdSchema.clone().optional().register(field, {
+        optional: true,
+        description: 'Optional backend storage key for the durable journal.'
+    })
+}).strict();
+
+export const AgentExecutionJournalRecordKindSchema = z.enum([
+    'message.accepted',
+    'process.started',
+    'process.completed',
+    'process.failed',
+    'process.terminated',
+    'process.output'
+]);
+
+export const AgentExecutionJournalRecordPayloadSchema = z.record(z.string(), z.unknown());
+
+export const AgentExecutionJournalRecordStorageSchema = EntityStorageSchema.extend({
+    id: EntityIdSchema.clone().register(field, {
+        description: 'Canonical Entity id for the AgentExecution journal record.'
+    }),
+    journalId: IdSchema.clone().register(field, {
+        description: 'Journal identity that owns this ordered record.'
+    }),
+    ownerEntity: AgentExecutionOwnerEntitySchema.clone().register(field, {
+        description: 'Canonical Entity type that owns this AgentExecution journal.'
+    }),
+    ownerId: IdSchema.clone().register(field, {
+        description: 'Canonical id of the Entity that owns this AgentExecution journal.'
+    }),
+    agentExecutionId: IdSchema.clone().register(field, {
+        description: 'AgentExecution identity associated with this journal record.'
+    }),
+    sequence: z.number().int().positive().register(field, {
+        description: 'One-based sequence number within the AgentExecution journal.'
+    }),
+    kind: AgentExecutionJournalRecordKindSchema.clone().register(field, {
+        description: 'Semantic kind of AgentExecution journal record.'
+    }),
+    occurredAt: z.string().trim().min(1).register(field, {
+        description: 'Timestamp when the recorded AgentExecution fact occurred.'
+    }),
+    summary: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Short human-readable summary of the journal record.'
+    }),
+    payload: AgentExecutionJournalRecordPayloadSchema.optional().register(field, {
+        type: 'object',
+        optional: true,
+        flexible: true,
+        description: 'Structured payload for the journal record.'
+    })
+}).strict().register(table, {
+    table: agentExecutionJournalTableName,
+    schemafull: true,
+    description: 'Ordered durable AgentExecution journal records.',
+    indexes: [
+        {
+            name: 'agent_execution_journal_sequence_idx',
+            fields: ['journalId', 'sequence'],
+            unique: true
+        },
+        {
+            name: 'agent_execution_journal_execution_time_idx',
+            fields: ['agentExecutionId', 'occurredAt']
+        },
+        {
+            name: 'agent_execution_journal_kind_idx',
+            fields: ['kind']
+        }
+    ]
+});
+
+export const AgentExecutionJournalRecordInputSchema = z.object({
+    kind: AgentExecutionJournalRecordKindSchema,
+    occurredAt: z.string().trim().min(1).optional(),
+    summary: z.string().trim().min(1).optional(),
+    payload: AgentExecutionJournalRecordPayloadSchema.optional()
+}).strict();
+
+export const AgentExecutionRetryLineageSchema = z.object({
+    retryOfAgentExecutionId: IdSchema.clone().optional().register(field, {
+        optional: true,
+        description: 'AgentExecution identity retried by this execution.'
+    }),
+    retryAttempt: z.number().int().positive().optional().register(field, {
+        optional: true,
+        description: 'Retry attempt number for this AgentExecution.'
+    })
 }).strict();
 
 export const AgentExecutionStorageSchema = EntityStorageSchema.extend({
-    ownerId: z.string().trim().min(1),
-    agentExecutionId: z.string().trim().min(1),
-    agentId: z.string().trim().min(1),
-    process: AgentExecutionProcessSchema,
-    adapterLabel: z.string().trim().min(1),
-    agentJournalPath: AgentExecutionJournalPathSchema.optional(),
-    terminalRecordingPath: AgentExecutionTerminalRecordingPathSchema.optional(),
-    lifecycleState: AgentExecutionLifecycleStateSchema,
-    attention: AgentExecutionAttentionStateSchema.optional(),
-    currentInputRequestId: z.string().trim().min(1).nullable().optional(),
-    awaitingResponseToMessageId: z.string().trim().min(1).nullable().optional(),
-    context: AgentExecutionContextSchema,
-    protocolDescriptor: AgentExecutionProtocolDescriptorSchema.optional(),
-    transportState: AgentExecutionTransportStateSchema.optional(),
-    scope: AgentExecutionScopeSchema.optional(),
-    failureMessage: z.string().trim().min(1).optional(),
-    createdAt: z.string().trim().min(1).optional(),
-    lastUpdatedAt: z.string().trim().min(1).optional(),
-    endedAt: z.string().trim().min(1).optional()
-}).strict();
+    id: EntityIdSchema.clone().register(field, {
+        description: 'Canonical Entity id for the AgentExecution storage record.'
+    }),
+    agentExecutionId: IdSchema.clone().register(field, {
+        description: 'Daemon-issued AgentExecution identity inside the owner scope.'
+    }),
+    ownerEntity: AgentExecutionOwnerEntitySchema.clone().register(field, {
+        description: 'Canonical Entity type that owns this AgentExecution.'
+    }),
+    ownerId: IdSchema.clone().register(field, {
+        description: 'Canonical id of the owning Entity.'
+    }),
+    agentId: IdSchema.clone().register(field, {
+        description: 'Selected Agent id for this AgentExecution.'
+    }),
+    lifecycle: AgentExecutionLifecycleStateSchema.clone().register(field, {
+        description: 'Daemon-owned lifecycle state.'
+    }),
+    attention: AgentExecutionAttentionStateSchema.clone().register(field, {
+        description: 'Current collaboration attention state.'
+    }),
+    activity: AgentExecutionActivityStateSchema.clone().register(field, {
+        description: 'Current semantic work posture.'
+    }),
+    messageRegistry: AgentExecutionMessageRegistrySchema.register(field, {
+        description: 'Current structured AgentExecution message registry.'
+    }),
+    transportState: AgentExecutionTransportStateSchema.register(field, {
+        description: 'Minimal current structured transport state.'
+    }),
+    mcpAvailability: AgentExecutionMcpAvailabilitySchema.register(field, {
+        description: 'Effective MCP-backed semantic operation availability.'
+    }),
+    journal: AgentExecutionJournalReferenceSchema.register(field, {
+        description: 'Durable AgentExecution journal reference.'
+    }),
+    lineage: AgentExecutionRetryLineageSchema.optional().register(field, {
+        optional: true,
+        description: 'Retry lineage when this execution was created from another AgentExecution.'
+    }),
+    createdAt: z.string().trim().min(1).register(field, {
+        description: 'AgentExecution creation timestamp.'
+    }),
+    updatedAt: z.string().trim().min(1).register(field, {
+        description: 'AgentExecution last update timestamp.'
+    })
+}).strict().register(table, {
+    table: agentExecutionTableName,
+    schemafull: true,
+    description: 'Canonical AgentExecution storage records.',
+    indexes: [
+        {
+            name: 'agent_execution_owner_identity_idx',
+            fields: ['ownerEntity', 'ownerId', 'agentExecutionId'],
+            unique: true
+        },
+        {
+            name: 'agent_execution_owner_updated_idx',
+            fields: ['ownerEntity', 'ownerId', 'updatedAt']
+        },
+        {
+            name: 'agent_execution_lifecycle_idx',
+            fields: ['lifecycle']
+        },
+        {
+            name: 'agent_execution_journal_idx',
+            fields: ['journal.journalId'],
+            unique: true
+        }
+    ]
+});
 
 const AgentExecutionStoragePayloadSchema = AgentExecutionStorageSchema.omit({ id: true });
 
 export const AgentExecutionSchema = EntitySchema.extend({
-    ...AgentExecutionStoragePayloadSchema.shape,
-    transportId: z.string().trim().min(1).optional(),
-    journalRecords: z.array(z.any()).optional(),
-    activityState: AgentExecutionActivityStateSchema.optional(),
-    terminalHandle: AgentExecutionTerminalHandleSchema.optional(),
-    assignmentLabel: z.string().trim().min(1).optional(),
-    workingDirectory: z.string().trim().min(1).optional(),
-    currentTurnTitle: z.string().trim().min(1).optional(),
-    taskId: z.string().trim().min(1).optional(),
-    interactionCapabilities: AgentExecutionInteractionCapabilitiesSchema,
-    timeline: AgentExecutionTimelineSchema.default({ timelineItems: [] }),
-    supportedMessages: z.array(AgentExecutionMessageDescriptorSchema),
-    progress: AgentExecutionProgressSchema.optional(),
-    waitingForInput: z.boolean().optional(),
-    acceptsPrompts: z.boolean().optional(),
-    acceptedCommands: z.array(AgentExecutionSupportedCommandTypeSchema).optional(),
-    interactionPosture: AgentExecutionInteractionPostureSchema.optional(),
-    transport: AgentExecutionTerminalTransportSchema.optional(),
-    reference: AgentExecutionReferenceSchema.optional(),
-    liveActivity: AgentExecutionLiveActivitySchema.optional(),
-    awaitingPermission: AgentExecutionPermissionRequestSchema.optional(),
-    telemetry: AgentExecutionTelemetrySchema.optional()
+    ...AgentExecutionStoragePayloadSchema.shape
 }).strict();
 
-export const AgentExecutionCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
-    entity: z.literal(agentExecutionEntityName),
-    method: z.literal('command'),
-    id: z.string().trim().min(1),
-    ownerId: z.string().trim().min(1),
-    agentExecutionId: z.string().trim().min(1),
-    commandId: AgentExecutionCommandIdSchema.optional()
+export const AgentExecutionInputSchema = z.object({
+    ownerEntity: AgentExecutionOwnerEntitySchema,
+    ownerId: IdSchema,
+    agentId: IdSchema,
+    agentExecutionId: IdSchema.optional(),
+    messageRegistry: AgentExecutionMessageRegistrySchema.default({ messages: [] }),
+    transportState: AgentExecutionTransportStateSchema.default({
+        status: 'unavailable',
+        structuredTransport: 'none'
+    }),
+    mcpAvailability: AgentExecutionMcpAvailabilitySchema.default('unavailable'),
+    journal: AgentExecutionJournalReferenceSchema.optional(),
+    lineage: AgentExecutionRetryLineageSchema.optional()
 }).strict();
 
-export const AgentExecutionChangedSchema = z.object({
-    reference: AgentExecutionEventSubjectSchema,
-    execution: AgentExecutionSchema
-}).strict();
+export const AgentExecutionLocatorSchema = z.object({
+    id: EntityIdSchema.optional(),
+    ownerEntity: AgentExecutionOwnerEntitySchema.optional(),
+    ownerId: IdSchema.optional(),
+    agentExecutionId: IdSchema.optional()
+}).strict().superRefine((value, context) => {
+    if (value.id) {
+        return;
+    }
+    if (value.ownerEntity && value.ownerId && value.agentExecutionId) {
+        return;
+    }
+    context.addIssue({
+        code: 'custom',
+        message: 'AgentExecution locator requires either id or ownerEntity, ownerId, and agentExecutionId.'
+    });
+});
 
-export const AgentExecutionEventSchema = z.discriminatedUnion('type', [
-    z.object({ type: z.literal('agent-execution-changed'), execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('prompt-accepted'), prompt: z.string(), execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('prompt-rejected'), prompt: z.string(), reason: z.string().trim().min(1), execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('agent-execution-started'), execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('agent-execution-resumed'), execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('agent-message'), channel: z.enum(['stdout', 'stderr', 'system']), text: z.string(), execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('permission-requested'), request: AgentExecutionPermissionRequestSchema, execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('tool-started'), toolName: z.string().trim().min(1), summary: z.string().trim().min(1).optional(), execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('tool-finished'), toolName: z.string().trim().min(1), summary: z.string().trim().min(1).optional(), execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('telemetry-updated'), telemetry: AgentExecutionTelemetrySchema, execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('context-updated'), telemetry: AgentExecutionTelemetrySchema, execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('cost-updated'), telemetry: AgentExecutionTelemetrySchema, execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('agent-execution-completed'), exitCode: z.number().int(), execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('agent-execution-failed'), errorMessage: z.string().trim().min(1), exitCode: z.number().int().optional(), execution: AgentExecutionSchema }).strict(),
-    z.object({ type: z.literal('agent-execution-cancelled'), reason: z.string().trim().min(1).optional(), execution: AgentExecutionSchema }).strict()
+export const AgentExecutionSendMessageSourceSchema = z.enum([
+    'operator',
+    'daemon',
+    'system',
+    'owner'
 ]);
 
-export type AgentExecutionContextArtifactRoleType = z.infer<typeof AgentExecutionContextArtifactRoleSchema>;
-export type AgentExecutionContextArtifactType = z.infer<typeof AgentExecutionContextArtifactSchema>;
-export type AgentExecutionContextInstructionType = z.infer<typeof AgentExecutionContextInstructionSchema>;
-export type AgentExecutionContextType = z.infer<typeof AgentExecutionContextSchema>;
-export type AgentExecutionJournalPathType = z.infer<typeof AgentExecutionJournalPathSchema>;
-export type AgentExecutionTurnRequestType = z.infer<typeof AgentExecutionTurnRequestSchema>;
-export type AgentExecutionConsoleStateType = z.infer<typeof AgentExecutionConsoleStateSchema>;
-export type AgentExecutionConsoleEventType = z.infer<typeof AgentExecutionConsoleEventSchema>;
-export type AgentExecutionLaunchRequestType = z.infer<typeof AgentExecutionLaunchRequestSchema>;
-export type AgentExecutionProcessType = z.infer<typeof AgentExecutionProcessSchema>;
+export const AgentExecutionMessageInputSchema = z.object({
+    kind: z.string().trim().min(1),
+    payload: z.unknown().optional(),
+    messageId: IdSchema.optional(),
+    source: AgentExecutionSendMessageSourceSchema.default('operator'),
+    startsTurn: z.boolean().optional()
+}).strict();
+
+export const AgentExecutionSendMessageInputSchema = AgentExecutionLocatorSchema.extend({
+    message: AgentExecutionMessageInputSchema
+}).strict();
+
+export const AgentExecutionSendMessageAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
+    agentExecutionId: IdSchema,
+    messageId: IdSchema,
+    accepted: z.literal(true)
+}).strict();
+
+export const AgentExecutionDataChangedEventSchema = z.object({
+    type: z.literal('data.changed'),
+    data: AgentExecutionSchema
+}).strict();
+
+export type AgentExecutionIdType = z.infer<typeof IdSchema>;
+export type AgentExecutionOwnerEntityType = z.infer<typeof AgentExecutionOwnerEntitySchema>;
+export type AgentExecutionOwnerReferenceType = z.infer<typeof AgentExecutionOwnerReferenceSchema>;
+export type AgentExecutionLifecycleStateType = z.infer<typeof AgentExecutionLifecycleStateSchema>;
+export type AgentExecutionAttentionStateType = z.infer<typeof AgentExecutionAttentionStateSchema>;
+export type AgentExecutionActivityStateType = z.infer<typeof AgentExecutionActivityStateSchema>;
+export type AgentExecutionMessageDirectionType = z.infer<typeof AgentExecutionMessageDirectionSchema>;
+export type AgentExecutionMessageDeliveryType = z.infer<typeof AgentExecutionMessageDeliverySchema>;
+export type AgentExecutionCommandPortabilityType = z.infer<typeof AgentExecutionCommandPortabilitySchema>;
+export type AgentExecutionJournalEffectType = z.infer<typeof AgentExecutionJournalEffectSchema>;
+export type AgentExecutionMessageDescriptorType = z.infer<typeof AgentExecutionMessageDescriptorSchema>;
+export type AgentExecutionMessageRegistryType = z.infer<typeof AgentExecutionMessageRegistrySchema>;
+export type AgentExecutionStructuredTransportType = z.infer<typeof AgentExecutionStructuredTransportSchema>;
+export type AgentExecutionTransportStatusType = z.infer<typeof AgentExecutionTransportStatusSchema>;
+export type AgentExecutionTransportStateType = z.infer<typeof AgentExecutionTransportStateSchema>;
+export type AgentExecutionMcpAvailabilityType = z.infer<typeof AgentExecutionMcpAvailabilitySchema>;
+export type AgentExecutionJournalReferenceType = z.infer<typeof AgentExecutionJournalReferenceSchema>;
+export type AgentExecutionJournalRecordKindType = z.infer<typeof AgentExecutionJournalRecordKindSchema>;
+export type AgentExecutionJournalRecordPayloadType = z.infer<typeof AgentExecutionJournalRecordPayloadSchema>;
+export type AgentExecutionJournalRecordStorageType = z.infer<typeof AgentExecutionJournalRecordStorageSchema>;
+export type AgentExecutionJournalRecordInputType = z.input<typeof AgentExecutionJournalRecordInputSchema>;
+export type AgentExecutionRetryLineageType = z.infer<typeof AgentExecutionRetryLineageSchema>;
 export type AgentExecutionStorageType = z.infer<typeof AgentExecutionStorageSchema>;
 export type AgentExecutionType = z.infer<typeof AgentExecutionSchema>;
-export type AgentExecutionCommandAcknowledgementType = z.infer<typeof AgentExecutionCommandAcknowledgementSchema>;
-export type AgentExecutionChangedType = z.infer<typeof AgentExecutionChangedSchema>;
-export type AgentExecutionEventType = z.infer<typeof AgentExecutionEventSchema>;
+export type AgentExecutionInputType = z.input<typeof AgentExecutionInputSchema>;
+export type AgentExecutionLocatorType = z.infer<typeof AgentExecutionLocatorSchema>;
+export type AgentExecutionSendMessageSourceType = z.infer<typeof AgentExecutionSendMessageSourceSchema>;
+export type AgentExecutionMessageInputType = z.infer<typeof AgentExecutionMessageInputSchema>;
+export type AgentExecutionSendMessageInputType = z.infer<typeof AgentExecutionSendMessageInputSchema>;
+export type AgentExecutionSendMessageAcknowledgementType = z.infer<typeof AgentExecutionSendMessageAcknowledgementSchema>;
+export type AgentExecutionDataChangedEventType = z.infer<typeof AgentExecutionDataChangedEventSchema>;

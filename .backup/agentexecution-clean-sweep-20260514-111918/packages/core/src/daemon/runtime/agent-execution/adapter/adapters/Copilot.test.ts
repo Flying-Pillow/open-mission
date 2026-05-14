@@ -1,0 +1,594 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import type { IPty } from 'node-pty';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type {
+	AgentCommand,
+	AgentExecutionEvent,
+	AgentExecutionType,
+	AgentLaunchConfig,
+	AgentPrompt
+} from '../../../../../entities/AgentExecution/AgentExecutionSchema.js';
+import { Agent } from '../../../../../entities/Agent/Agent.js';
+import { AgentRegistry } from '../../../../../entities/Agent/AgentRegistry.js';
+import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
+import { AgentExecutionCoordinator } from '../../AgentExecutionCoordinator.js';
+import { OpenMissionMcpServer } from '../../mcp/OpenMissionMcpServer.js';
+import { createMemoryAgentExecutionJournalWriter } from '../../testing/createMemoryAgentExecutionJournalWriter.js';
+import { createCopilot } from './Copilot.js';
+
+type MockTerminalState = {
+	spawnedCommand: string;
+	spawnedArgs: string[];
+	writes: string[];
+	killCount: number;
+};
+
+function createLaunchConfig(overrides: Partial<AgentLaunchConfig> = {}): AgentLaunchConfig {
+	return {
+		scope: {
+			kind: 'task',
+			missionId: 'mission-1',
+			taskId: 'task-1',
+			stageId: 'implementation'
+		},
+		workingDirectory: '/tmp/work',
+		task: {
+			taskId: 'task-1',
+			stageId: 'implementation',
+			title: 'Implement the task',
+			description: 'Implement the task',
+			instruction: 'Implement the task.'
+		},
+		specification: {
+			summary: 'Implement the task.',
+			documents: []
+		},
+		resume: { mode: 'new' },
+		initialPrompt: {
+			source: 'engine',
+			text: 'Implement the task.'
+		},
+		...overrides
+	};
+}
+
+function createLaunchConfigWithoutInitialPrompt(): AgentLaunchConfig {
+	const request = createLaunchConfig();
+	delete request.initialPrompt;
+	return request;
+}
+
+type StartedTerminalExecution = {
+	getSnapshot(): AgentExecutionType;
+	onDidEvent(listener: (event: AgentExecutionEvent) => void): { dispose(): void };
+	submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionType>;
+	submitCommand(command: AgentCommand): Promise<AgentExecutionType>;
+	terminate(reason?: string): Promise<AgentExecutionType>;
+};
+
+async function startExecution(
+	adapter: AgentAdapter,
+	config: AgentLaunchConfig
+): Promise<StartedTerminalExecution> {
+	const openMissionMcpServer = new OpenMissionMcpServer({
+		agentExecutionRegistry: {
+			routeTransportObservation() {
+				return {
+					status: 'recorded-only',
+					agentExecutionId: 'test-agent-execution',
+					eventId: 'test-event',
+					observationId: 'test-observation'
+				};
+			}
+		}
+	});
+	await openMissionMcpServer.start();
+	const { journalWriter } = createMemoryAgentExecutionJournalWriter();
+	const executor = new AgentExecutionCoordinator({
+		agentRegistry: new AgentRegistry({
+			agents: [await Agent.fromAdapter(adapter)]
+		}),
+		openMissionMcpServer,
+		journalWriter
+	});
+	const execution = await executor.startExecution(config);
+	const agentExecutionId = execution.getExecution().agentExecutionId;
+	return {
+		getSnapshot: () => execution.getExecution(),
+		onDidEvent: (listener) => execution.onDidEvent(listener),
+		submitPrompt: (prompt) => executor.submitPrompt(agentExecutionId, prompt),
+		submitCommand: (command) => executor.submitCommand(agentExecutionId, command),
+		terminate: (reason) => executor.terminateExecution(agentExecutionId, reason)
+	};
+}
+
+describe('Copilot', () => {
+	let state: MockTerminalState;
+	let runtimeDirectory: string;
+	let trustedConfigDir: string;
+	let copilotScriptPath: string;
+
+	beforeEach(async () => {
+		vi.useFakeTimers();
+		runtimeDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-copilot-cli-'));
+		trustedConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-copilot-config-'));
+		copilotScriptPath = path.join(runtimeDirectory, 'copilot');
+		await fs.writeFile(copilotScriptPath, '#!/bin/sh\nexit 0\n', { encoding: 'utf8', mode: 0o755 });
+		state = {
+			spawnedCommand: '',
+			spawnedArgs: [],
+			writes: [],
+			killCount: 0
+		};
+	});
+
+	afterEach(async () => {
+		await fs.rm(runtimeDirectory, { recursive: true, force: true });
+		await fs.rm(trustedConfigDir, { recursive: true, force: true });
+		vi.unstubAllEnvs();
+		vi.useRealTimers();
+	});
+
+	it('starts a PTY-backed AgentExecution and passes the initial prompt via launch args', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const execution = await startExecution(adapter, createLaunchConfig());
+		const snapshot = execution.getSnapshot();
+
+		expect(snapshot.agentId).toBe('copilot-cli');
+		expect(snapshot.transport?.kind).toBe('terminal');
+		expect(snapshot.agentExecutionId).toMatch(/^task-1-copilot-cli-[a-z0-9]{8}$/);
+		expect(snapshot.transport?.terminalName.endsWith(`:task:task-1:${snapshot.agentExecutionId}`)).toBe(true);
+		expect(snapshot.transport?.terminalPaneId).toBe('pty');
+		expect(snapshot.status).toBe('running');
+		expect(state.spawnedCommand).toBe('/bin/sh');
+		expect(state.spawnedArgs).toContain(copilotScriptPath);
+		expect(state.spawnedArgs).toContain('--allow-all-paths');
+		expect(state.spawnedArgs).toContain('--allow-all-tools');
+		expect(state.spawnedArgs).toContain('--allow-all-urls');
+		expect(state.spawnedArgs).toContain('--config-dir');
+		expect(state.spawnedArgs).toContain(trustedConfigDir);
+		expect(state.spawnedArgs).toContain('--add-dir');
+		expect(state.spawnedArgs).toContain('/tmp/work');
+		expect(state.spawnedArgs).toContain('-i');
+		expect(state.spawnedArgs.some((arg) => arg.includes('Implement the task.'))).toBe(true);
+		expect(state.spawnedArgs).toContain('--additional-mcp-config');
+		const mcpConfigReference = state.spawnedArgs[state.spawnedArgs.indexOf('--additional-mcp-config') + 1];
+		expect(mcpConfigReference?.startsWith('@')).toBe(true);
+		const mcpConfig = JSON.parse(await fs.readFile(mcpConfigReference?.slice(1) ?? '', 'utf8')) as {
+			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+		};
+		expect(mcpConfig.mcpServers?.['open-mission-mcp']?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.agentExecutionId]);
+		expect(mcpConfig.mcpServers?.['open-mission-mcp']?.env?.['OPEN_MISSION_AGENT_EXECUTION_OWNER_ID']).toBeTruthy();
+		expect(mcpConfig.mcpServers?.['open-mission-mcp']?.env?.['OPEN_MISSION_MCP_TOKEN']).toBeTruthy();
+		expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(false);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Open Mission MCP is already connected and available.'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Open Mission MCP is the authoritative operator interaction protocol'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Do not ask the operator for AgentExecution ids, event ids, tokens, or transport fields.'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('@task::'))).toBe(false);
+		expect(state.writes).not.toContain('Implement the task.');
+	});
+
+
+	it('uses the source Open Mission CLI bridge for MCP config in source runtime mode', async () => {
+		vi.stubEnv('OPEN_MISSION_DAEMON_RUNTIME_MODE', 'source');
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const execution = await startExecution(adapter, createLaunchConfig());
+		const snapshot = execution.getSnapshot();
+		const mcpConfigReference = state.spawnedArgs[state.spawnedArgs.indexOf('--additional-mcp-config') + 1];
+		const mcpConfig = JSON.parse(await fs.readFile(mcpConfigReference?.slice(1) ?? '', 'utf8')) as {
+			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+		};
+		const bridge = mcpConfig.mcpServers?.['open-mission-mcp'];
+
+		expect(bridge?.command).toBe('pnpm');
+		expect(bridge?.args).toEqual([
+			'--dir',
+			process.cwd(),
+			'--filter',
+			'@flying-pillow/open-mission',
+			'exec',
+			'tsx',
+			'--tsconfig',
+			'./tsconfig.dev.json',
+			'./src/open-mission.ts',
+			'mcp',
+			'connect',
+			'--agent-execution',
+			snapshot.agentExecutionId
+		]);
+		expect(bridge?.env?.['OPEN_MISSION_AGENT_EXECUTION_OWNER_ID']).toBeTruthy();
+		expect(bridge?.env?.['OPEN_MISSION_MCP_TOKEN']).toBeTruthy();
+	});
+
+	it('honors an explicit Open Mission CLI bridge command override', async () => {
+		vi.stubEnv('OPEN_MISSION_DAEMON_RUNTIME_MODE', 'source');
+		vi.stubEnv('OPEN_MISSION_CLI_COMMAND', '/opt/open-mission/bin/open-mission');
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const execution = await startExecution(adapter, createLaunchConfig());
+		const snapshot = execution.getSnapshot();
+		const mcpConfigReference = state.spawnedArgs[state.spawnedArgs.indexOf('--additional-mcp-config') + 1];
+		const mcpConfig = JSON.parse(await fs.readFile(mcpConfigReference?.slice(1) ?? '', 'utf8')) as {
+			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+		};
+		const bridge = mcpConfig.mcpServers?.['open-mission-mcp'];
+
+		expect(bridge?.command).toBe('/opt/open-mission/bin/open-mission');
+		expect(bridge?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.agentExecutionId]);
+	});
+
+	it('classifies login failures for connection diagnostics', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const diagnostic = adapter.diagnoseConnectionFailure({
+			stdout: '',
+			stderr: 'Login required. Please sign in again.'
+		});
+
+		expect(diagnostic).toMatchObject({
+			kind: 'auth-failed',
+			diagnosticCode: 'copilot-auth'
+		});
+	});
+
+	it('uses interactive mode by default for terminal-backed MCP setup', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const plan = adapter.createLaunchPlan(createLaunchConfig());
+
+		expect(plan.mode).toBe('interactive');
+		expect(plan.command).toBe('copilot');
+		expect(plan.args).toContain('--allow-all-paths');
+		expect(plan.args).toContain('--allow-all-tools');
+		expect(plan.args).toContain('--allow-all-urls');
+		expect(plan.args).toContain('--config-dir');
+		expect(plan.args).toContain(trustedConfigDir);
+		expect(plan.args).toContain('--add-dir');
+		expect(plan.args).toContain('/tmp/work');
+		expect(plan.args).toContain('-i');
+		expect(plan.args.some((arg) => arg.includes('Implement the task.'))).toBe(true);
+		expect(plan.args).not.toContain('-p');
+	});
+
+	it('uses non-interactive print mode when explicitly requested for direct stdout parsing', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'print',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const plan = adapter.createLaunchPlan(createLaunchConfig());
+
+		expect(plan.mode).toBe('print');
+		expect(plan.command).toBe('copilot');
+		expect(plan.args).toContain('--allow-all');
+		expect(plan.args).toContain('--no-color');
+		expect(plan.args).toContain('--silent');
+		expect(plan.args).toContain('--output-format');
+		expect(plan.args).toContain('text');
+		expect(plan.args).toContain('--stream');
+		expect(plan.args).toContain('on');
+		expect(plan.args).toContain('--config-dir');
+		expect(plan.args).toContain(trustedConfigDir);
+		expect(plan.args).toContain('--add-dir');
+		expect(plan.args).toContain('/tmp/work');
+		expect(plan.args).toContain('-p');
+		expect(plan.args.some((arg) => arg.includes('Implement the task.'))).toBe(true);
+		expect(plan.args).not.toContain('-i');
+	});
+
+	it('stores trusted folders in settings.json without reading managed config.json', async () => {
+		await fs.mkdir(trustedConfigDir, { recursive: true });
+		await fs.writeFile(
+			path.join(trustedConfigDir, 'config.json'),
+			[
+				'// User settings belong in settings.json.',
+				'// This file is managed automatically.',
+				'{',
+				'  "trustedFolders": ["/tmp/already-trusted"]',
+				'}'
+			].join('\n'),
+			'utf8'
+		);
+
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const execution = await startExecution(adapter, createLaunchConfig());
+		const snapshot = execution.getSnapshot();
+		const persistedSettings = JSON.parse(
+			await fs.readFile(path.join(trustedConfigDir, 'settings.json'), 'utf8')
+		) as { trustedFolders?: string[]; trusted_folders?: string[] };
+
+		expect(snapshot.status).toBe('running');
+		expect(persistedSettings.trustedFolders).toContain('/tmp/work');
+		expect(persistedSettings.trusted_folders).toContain('/tmp/work');
+	});
+
+	it('derives the AgentExecution name from the explicit task execution scope on launch', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const execution = await startExecution(adapter, createLaunchConfig({
+			scope: {
+				kind: 'task',
+				missionId: 'mission-1',
+				taskId: 'spec/01-spec-from-prd',
+				stageId: 'spec'
+			},
+			task: {
+				taskId: 'spec/01-spec-from-prd',
+				stageId: 'spec',
+				title: 'Spec from PRD',
+				description: 'Spec from PRD',
+				instruction: 'Spec from PRD'
+			}
+		}));
+
+		expect(execution.getSnapshot().agentExecutionId).toMatch(/^01-spec-from-prd-copilot-cli-[a-z0-9]{8}$/);
+	});
+
+	it('creates a fresh AgentExecution id for each new launch of the same task', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const firstAgentExecution = await startExecution(adapter, createLaunchConfig());
+		const secondAgentExecution = await startExecution(adapter, createLaunchConfig());
+
+		expect(firstAgentExecution.getSnapshot().agentExecutionId).not.toBe(secondAgentExecution.getSnapshot().agentExecutionId);
+	});
+
+	it('submits prompts by sending literal keys into terminal transport', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+		const execution = await startExecution(adapter, createLaunchConfigWithoutInitialPrompt());
+		const events: AgentExecutionEvent[] = [];
+		execution.onDidEvent((event) => {
+			events.push(event);
+		});
+
+		await execution.submitPrompt({ source: 'operator', text: 'Explain the current failure.' });
+
+		expect(state.writes).toContain('Explain the current failure.');
+		expect(state.writes).toContain('\r');
+		expect(events.some((event) => event.type === 'execution.updated')).toBe(true);
+	});
+
+	it('maps interrupt commands to Ctrl+C and semantic input-request state', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+		const execution = await startExecution(adapter, createLaunchConfigWithoutInitialPrompt());
+		const events: AgentExecutionEvent[] = [];
+		execution.onDidEvent((event) => {
+			events.push(event);
+		});
+
+		const snapshot = await execution.submitCommand({ type: 'interrupt' });
+
+		expect(state.writes).toContain('\x03');
+		expect(snapshot.waitingForInput).toBe(true);
+		expect(events.find((event) => event.type === 'execution.updated')).toBeDefined();
+	});
+
+	it('terminates a AgentExecution through the adapter API', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+		const execution = await startExecution(adapter, createLaunchConfigWithoutInitialPrompt());
+		const events: AgentExecutionEvent[] = [];
+		execution.onDidEvent((event) => {
+			events.push(event);
+		});
+		await execution.terminate('operator requested stop');
+
+		expect(events.some((event) => event.type === 'execution.terminated')).toBe(true);
+		expect(execution.getSnapshot().status).toBe('terminated');
+		expect(state.killCount).toBe(1);
+	});
+
+	it('trusts mission dossier cwd and mission root ancestor when launching', async () => {
+		const missionDossierWorkingDirectory = '/tmp/mission-root/.mission/missions/mission-13';
+		const missionRootDirectory = '/tmp/mission-root';
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		await startExecution(adapter, createLaunchConfig({
+			workingDirectory: missionDossierWorkingDirectory
+		}));
+
+		expect(state.spawnedArgs).toContain(missionDossierWorkingDirectory);
+		expect(state.spawnedArgs).toContain(missionRootDirectory);
+
+		const settings = JSON.parse(
+			await fs.readFile(`${trustedConfigDir}/settings.json`, 'utf8')
+		) as { trustedFolders?: string[]; trusted_folders?: string[] };
+		expect(settings.trustedFolders).toContain(missionDossierWorkingDirectory);
+		expect(settings.trustedFolders).toContain(missionRootDirectory);
+		expect(settings.trusted_folders).toContain(missionDossierWorkingDirectory);
+		expect(settings.trusted_folders).toContain(missionRootDirectory);
+	});
+
+	it('launches successfully with caller-provided launch env', async () => {
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-copilot-workspace-'));
+		try {
+			const adapter = createAgentAdapter(createCopilot({
+				launchMode: 'interactive',
+				command: 'copilot',
+				trustedConfigDir,
+				env: { PATH: runtimeDirectory },
+				spawn: createSpawn(state, () => createFakePty(state)),
+			}), {});
+
+			await startExecution(adapter, createLaunchConfig({
+				workingDirectory: workspaceRoot,
+				launchEnv: {
+					MISSION_AGENT_ENV_FIXTURE: 'enabled'
+				}
+			}));
+
+			expect(state.spawnedArgs).toContain(copilotScriptPath);
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
+});
+
+type FakePty = IPty & {
+	writes: string[];
+	killCount: number;
+	emitExit(exitCode?: number): void;
+};
+
+function createSpawn(
+	state: MockTerminalState,
+	createPty: () => FakePty
+): (command: string, args: string | string[]) => FakePty {
+	return ((command: string, args: string | string[]) => {
+		state.spawnedCommand = command;
+		state.spawnedArgs = Array.isArray(args) ? [...args] : [args];
+		return createPty();
+	}) as never;
+}
+
+function createFakePty(state: MockTerminalState): FakePty {
+	let onDataListener: ((chunk: string) => void) | undefined;
+	let onExitListener: ((event: { exitCode: number; signal?: number }) => void) | undefined;
+	const fakePty = {
+		pid: 1,
+		process: 'fake-shell',
+		cols: 120,
+		rows: 32,
+		handleFlowControl: false,
+		writes: [] as string[],
+		killCount: 0,
+		write(data: string) {
+			fakePty.writes.push(data);
+			state.writes.push(data);
+			onDataListener?.(data);
+		},
+		resize() { },
+		kill() {
+			fakePty.killCount += 1;
+			state.killCount += 1;
+			onExitListener?.({ exitCode: 0 });
+		},
+		clear() { },
+		onData(listener: (chunk: string) => void) {
+			onDataListener = listener;
+			return { dispose() { } };
+		},
+		onExit(listener: (event: { exitCode: number; signal?: number }) => void) {
+			onExitListener = listener;
+			return { dispose() { } };
+		},
+		emitExit(exitCode = 0) {
+			onExitListener?.({ exitCode });
+		},
+		pause() { },
+		resume() { },
+		setEncoding() { },
+		addListener() {
+			return fakePty;
+		},
+		removeListener() {
+			return fakePty;
+		},
+		once() {
+			return fakePty;
+		},
+		removeAllListeners() {
+			return fakePty;
+		},
+		listeners() {
+			return [];
+		},
+		rawListeners() {
+			return [];
+		},
+		emit() {
+			return true;
+		},
+		listenerCount() {
+			return 0;
+		},
+		prependListener() {
+			return fakePty;
+		},
+		prependOnceListener() {
+			return fakePty;
+		},
+		eventNames() {
+			return [];
+		}
+	} as FakePty;
+	return fakePty;
+}

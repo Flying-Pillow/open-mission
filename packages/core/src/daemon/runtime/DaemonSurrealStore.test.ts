@@ -5,11 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { DaemonSurrealStore, resolveDaemonSurrealStorePath } from './DaemonSurrealStore.js';
 
 describe('DaemonSurrealStore', () => {
-    it('opens an embedded SurrealDB database under the root .mission runtime folder', async () => {
+    it('opens the repository-owned embedded SurrealDB database', async () => {
         const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-surreal-root-'));
         const store = DaemonSurrealStore.forCodeRoot({
-            rootPath,
-            namespace: 'open_mission_daemon_test'
+            rootPath
         });
         const storagePath = resolveDaemonSurrealStorePath(rootPath);
 
@@ -18,8 +17,8 @@ describe('DaemonSurrealStore', () => {
             expect(store.readStatus()).toMatchObject({
                 available: true,
                 engine: 'surrealkv',
-                namespace: 'open_mission_daemon_test',
-                database: 'code_intelligence',
+                namespace: 'open_mission',
+                database: 'mission',
                 storagePath
             });
             await expect(fs.stat(storagePath)).resolves.toBeDefined();
@@ -31,11 +30,8 @@ describe('DaemonSurrealStore', () => {
         }
     });
 
-    it('keeps in-memory storage available only by explicit construction', async () => {
-        const store = DaemonSurrealStore.inMemory({
-            namespace: 'open_mission_daemon_memory_test',
-            database: 'mission'
-        });
+    it('keeps in-memory storage available only through the shared driver', async () => {
+        const store = DaemonSurrealStore.inMemory();
 
         await store.start();
         await store.stop();
@@ -43,7 +39,7 @@ describe('DaemonSurrealStore', () => {
         expect(store.readStatus()).toMatchObject({
             available: false,
             engine: 'mem',
-            namespace: 'open_mission_daemon_memory_test',
+            namespace: 'open_mission',
             database: 'mission'
         });
     });

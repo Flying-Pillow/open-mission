@@ -39,6 +39,7 @@ export type SurrealIndexMetadata = SurrealIndexKind | SurrealVectorIndexMetadata
 
 export type SurrealTableMetadata = {
     table: string;
+    description?: string;
     kind?: SurrealTableKind;
     from?: string;
     to?: string;
@@ -50,7 +51,6 @@ export type SurrealTableMetadata = {
     permissions?: string;
     analyzers?: SurrealAnalyzerMetadata[];
     indexes?: SurrealTableIndexMetadata[];
-    comment?: string;
 };
 
 export type SurrealFieldMetadata = {
@@ -73,7 +73,6 @@ export type SurrealFieldMetadata = {
     assertion?: string;
     default?: string;
     readonly?: boolean;
-    comment?: string;
     fields?: Record<string, SurrealFieldMetadata>;
 };
 
@@ -109,7 +108,7 @@ function normalizeTableMetadata(metadata: SurrealTableMetadata): SurrealTableMet
         ...(metadata.permissions?.trim() ? { permissions: metadata.permissions.trim() } : {}),
         ...(metadata.analyzers ? { analyzers: metadata.analyzers.map(normalizeAnalyzerMetadata) } : {}),
         ...(metadata.indexes ? { indexes: metadata.indexes.map(normalizeTableIndexMetadata) } : {}),
-        ...(metadata.comment?.trim() ? { comment: metadata.comment.trim() } : {})
+        ...(metadata.description?.trim() ? { description: metadata.description.trim() } : {})
     };
 }
 
@@ -134,7 +133,6 @@ function normalizeFieldMetadata(metadata: SurrealFieldMetadata): SurrealFieldMet
         ...(metadata.assertion?.trim() ? { assertion: metadata.assertion.trim() } : {}),
         ...(metadata.default?.trim() ? { default: metadata.default.trim() } : {}),
         ...(metadata.readonly !== undefined ? { readonly: metadata.readonly } : {}),
-        ...(metadata.comment?.trim() ? { comment: metadata.comment.trim() } : {}),
         ...(metadata.fields ? { fields: normalizeFieldMetadataRecord(metadata.fields) } : {})
     };
 }

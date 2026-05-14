@@ -41,7 +41,6 @@ export type CompiledSurrealField = {
     assertion?: string;
     default?: string;
     readonly: boolean;
-    comment?: string;
     fields?: Record<string, CompiledSurrealField>;
 };
 
@@ -66,7 +65,7 @@ export type CompiledSurrealModel = {
     to?: string;
     as?: string;
     permissions?: string;
-    comment?: string;
+    description?: string;
     inputSchemaName: string;
     storageSchemaName: string;
     dataSchemaName: string;
@@ -97,9 +96,21 @@ type ZodRuntimeDefinition = {
     type?: string;
     innerType?: z.ZodType;
     element?: z.ZodType;
+    valueType?: z.ZodType;
+    keyType?: z.ZodType;
+    options?: z.ZodType[];
+    items?: z.ZodType[];
+    in?: z.ZodType;
+    out?: z.ZodType;
     checks?: Array<{
         isInt?: boolean;
         format?: string;
+        _zod?: {
+            def?: {
+                check?: string;
+                format?: string;
+            };
+        };
         def?: {
             check?: string;
             format?: string;
@@ -168,7 +179,7 @@ export function compileModel(definition: ZodSurrealModelDefinition): CompiledSur
         ...(table.to ? { to: table.to } : {}),
         ...(table.as ? { as: table.as } : {}),
         ...(table.permissions ? { permissions: table.permissions } : {}),
-        ...(table.comment ? { comment: table.comment } : {}),
+        ...(table.description ? { description: table.description } : {}),
         inputSchemaName: `${definition.name}Input`,
         storageSchemaName: `${definition.name}Storage`,
         dataSchemaName: `${definition.name}Data`,
@@ -221,11 +232,36 @@ function compileNestedFields(
         );
     }
 
-    if (fieldSchema instanceof z.ZodObject) {
-        return compileFields(fieldSchema, fieldSchema);
+    const nestedObjectSchema = findNestedObjectSchema(fieldSchema);
+    if (nestedObjectSchema) {
+        return compileFields(nestedObjectSchema, nestedObjectSchema);
     }
 
     return undefined;
+}
+
+function findNestedObjectSchema(schema: z.ZodType): z.ZodObject | undefined {
+    if (schema instanceof z.ZodObject) {
+        return schema;
+    }
+
+    const definition = readZodDefinition(schema);
+    switch (definition.type) {
+        case 'optional':
+        case 'nullable':
+        case 'default':
+        case 'catch':
+        case 'readonly':
+        case 'nonoptional': {
+            return definition.innerType ? findNestedObjectSchema(definition.innerType) : undefined;
+        }
+        case 'array': {
+            return definition.element ? findNestedObjectSchema(definition.element) : undefined;
+        }
+        default: {
+            return undefined;
+        }
+    }
 }
 
 function normalizeCompiledField(
@@ -255,7 +291,6 @@ function normalizeCompiledField(
         ...(metadata.assertion ? { assertion: metadata.assertion } : {}),
         ...(metadata.default ? { default: metadata.default } : {}),
         readonly: metadata.readonly ?? false,
-        ...(metadata.comment ? { comment: metadata.comment } : {}),
         ...(fields && Object.keys(fields).length > 0 ? { fields } : {})
     };
 }
@@ -277,11 +312,23 @@ function inferSurrealFieldShape(schema: z.ZodType): InferredSurrealFieldShape {
             return inferInnerSurrealFieldShape(definition);
         }
         case 'array': {
-            return mergeInferredSurrealFieldShape(inferElementSurrealFieldShape(definition), { array: true });
+            return mergeInferredSurrealFieldShape(inferArrayElementSurrealFieldShape(definition.element), { array: true });
+        }
+        case 'set': {
+            return mergeInferredSurrealFieldShape(inferArrayElementSurrealFieldShape(definition.valueType), { array: true });
+        }
+        case 'tuple': {
+            return mergeInferredSurrealFieldShape(inferTupleElementSurrealFieldShape(definition.items ?? []), { array: true });
+        }
+        case 'union': {
+            return inferUnionSurrealFieldShape(definition.options ?? []);
+        }
+        case 'pipe': {
+            return definition.in ? inferSurrealFieldShape(definition.in) : inferInnerSurrealFieldShape(definition);
         }
         case 'string':
         case 'enum': {
-            return { type: 'string' };
+            return { type: isDateTimeStringDefinition(definition) ? 'datetime' : 'string' };
         }
         case 'literal': {
             return inferLiteralSurrealFieldShape(definition.values ?? []);
@@ -303,6 +350,13 @@ function inferSurrealFieldShape(schema: z.ZodType): InferredSurrealFieldShape {
         case 'map': {
             return { type: 'object' };
         }
+        case 'null': {
+            return { nullable: true };
+        }
+        case 'undefined':
+        case 'void': {
+            return { optional: true };
+        }
         default: {
             return {};
         }
@@ -313,8 +367,95 @@ function inferInnerSurrealFieldShape(definition: ZodRuntimeDefinition): Inferred
     return definition.innerType ? inferSurrealFieldShape(definition.innerType) : {};
 }
 
-function inferElementSurrealFieldShape(definition: ZodRuntimeDefinition): InferredSurrealFieldShape {
-    return definition.element ? inferSurrealFieldShape(definition.element) : {};
+function inferArrayElementSurrealFieldShape(element: z.ZodType | undefined): InferredSurrealFieldShape {
+    if (!element) {
+        return {};
+    }
+
+    const inferred = inferSurrealFieldShape(element);
+    const type = composeInferredSurrealType(inferred);
+    return type ? { type } : {};
+}
+
+function inferTupleElementSurrealFieldShape(items: z.ZodType[]): InferredSurrealFieldShape {
+    if (items.length === 0) {
+        return { type: 'object' };
+    }
+
+    const itemTypes = items
+        .map((item) => composeInferredSurrealType(inferSurrealFieldShape(item)))
+        .filter((itemType): itemType is string => Boolean(itemType));
+    const uniqueItemTypes = new Set(itemTypes);
+    if (uniqueItemTypes.size !== 1) {
+        return { type: 'object' };
+    }
+    const [type] = Array.from(uniqueItemTypes);
+    if (!type) {
+        return { type: 'object' };
+    }
+    return { type };
+}
+
+function inferUnionSurrealFieldShape(options: z.ZodType[]): InferredSurrealFieldShape {
+    let optional = false;
+    let nullable = false;
+    const concreteShapes: InferredSurrealFieldShape[] = [];
+
+    for (const option of options) {
+        const inferred = inferSurrealFieldShape(option);
+        if (!inferred.type && !inferred.array) {
+            optional ||= inferred.optional === true;
+            nullable ||= inferred.nullable === true;
+            continue;
+        }
+
+        optional ||= inferred.optional === true;
+        nullable ||= inferred.nullable === true;
+        concreteShapes.push({ ...inferred, optional: false, nullable: false });
+    }
+
+    const commonShape = inferCommonConcreteShape(concreteShapes);
+    return {
+        ...commonShape,
+        ...(optional ? { optional: true } : {}),
+        ...(nullable ? { nullable: true } : {})
+    };
+}
+
+function inferCommonConcreteShape(shapes: InferredSurrealFieldShape[]): InferredSurrealFieldShape {
+    if (shapes.length === 0) {
+        return {};
+    }
+
+    const shapeTypes = new Set(shapes.map((shape) => composeInferredSurrealType(shape)).filter(Boolean));
+    if (shapeTypes.size === 1) {
+        const first = shapes[0] as InferredSurrealFieldShape;
+        return {
+            ...(first.type ? { type: first.type } : {}),
+            ...(first.array ? { array: true } : {})
+        };
+    }
+
+    if (shapes.every((shape) => shape.type === 'object' && !shape.array)) {
+        return { type: 'object' };
+    }
+
+    return {};
+}
+
+function composeInferredSurrealType(inferred: InferredSurrealFieldShape): string | undefined {
+    let type = inferred.type;
+    if (!type) {
+        return undefined;
+    }
+
+    if (inferred.array) {
+        type = `array<${type}>`;
+    }
+    if (inferred.optional || inferred.nullable) {
+        type = `option<${type}>`;
+    }
+    return type;
 }
 
 function mergeInferredSurrealFieldShape(
@@ -354,8 +495,23 @@ function inferLiteralSurrealFieldShape(values: unknown[]): InferredSurrealFieldS
 
 function isIntNumberDefinition(definition: ZodRuntimeDefinition): boolean {
     return Boolean(definition.checks?.some((check) =>
-        check.isInt === true || check.format === 'safeint' || check.def?.format === 'safeint' || check.def?.check === 'int'
+        check.isInt === true || getZodCheckFormat(check) === 'safeint' || getZodCheckName(check) === 'int'
     ));
+}
+
+function isDateTimeStringDefinition(definition: ZodRuntimeDefinition): boolean {
+    return Boolean(definition.checks?.some((check) => {
+        const format = getZodCheckFormat(check);
+        return format === 'datetime' || format === 'date';
+    }));
+}
+
+function getZodCheckFormat(check: NonNullable<ZodRuntimeDefinition['checks']>[number]): string | undefined {
+    return check.format ?? check.def?.format ?? check._zod?.def?.format;
+}
+
+function getZodCheckName(check: NonNullable<ZodRuntimeDefinition['checks']>[number]): string | undefined {
+    return check.def?.check ?? check._zod?.def?.check;
 }
 
 function readZodDefinition(schema: z.ZodType): ZodRuntimeDefinition {

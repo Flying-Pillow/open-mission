@@ -1,0 +1,14 @@
+DEFINE TABLE OVERWRITE agent_execution_journal TYPE NORMAL SCHEMAFULL COMMENT "Ordered durable AgentExecution journal records.";
+DEFINE FIELD OVERWRITE agentExecutionId ON TABLE agent_execution_journal TYPE string COMMENT "AgentExecution identity associated with this journal record.";
+DEFINE FIELD OVERWRITE id ON TABLE agent_execution_journal TYPE string COMMENT "Canonical Entity id for the AgentExecution journal record.";
+DEFINE FIELD OVERWRITE journalId ON TABLE agent_execution_journal TYPE string COMMENT "Journal identity that owns this ordered record.";
+DEFINE FIELD OVERWRITE kind ON TABLE agent_execution_journal TYPE string COMMENT "Semantic kind of AgentExecution journal record.";
+DEFINE FIELD OVERWRITE occurredAt ON TABLE agent_execution_journal TYPE string COMMENT "Timestamp when the recorded AgentExecution fact occurred.";
+DEFINE FIELD OVERWRITE ownerEntity ON TABLE agent_execution_journal TYPE string COMMENT "Canonical Entity type that owns this AgentExecution journal.";
+DEFINE FIELD OVERWRITE ownerId ON TABLE agent_execution_journal TYPE string COMMENT "Canonical id of the Entity that owns this AgentExecution journal.";
+DEFINE FIELD OVERWRITE payload ON TABLE agent_execution_journal TYPE option<object> FLEXIBLE COMMENT "Structured payload for the journal record.";
+DEFINE FIELD OVERWRITE sequence ON TABLE agent_execution_journal TYPE int COMMENT "One-based sequence number within the AgentExecution journal.";
+DEFINE FIELD OVERWRITE summary ON TABLE agent_execution_journal TYPE option<string> COMMENT "Short human-readable summary of the journal record.";
+DEFINE INDEX OVERWRITE agent_execution_journal_sequence_idx ON TABLE agent_execution_journal FIELDS journalId, sequence UNIQUE;
+DEFINE INDEX OVERWRITE agent_execution_journal_execution_time_idx ON TABLE agent_execution_journal FIELDS agentExecutionId, occurredAt;
+DEFINE INDEX OVERWRITE agent_execution_journal_kind_idx ON TABLE agent_execution_journal FIELDS kind;

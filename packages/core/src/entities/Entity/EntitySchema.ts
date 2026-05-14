@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
+export const IdSchema = nonEmptyStringSchema;
 export const EntityTableSchema = z.string().trim().min(1).regex(/^[a-z][a-z0-9_]*$/);
 export const EntityNameSchema = nonEmptyStringSchema;
 export const EntityMethodNameSchema = nonEmptyStringSchema;
@@ -207,6 +208,7 @@ export const EntityEventEnvelopeSchema = z.object({
 }).strict();
 
 export type EntityIdType = z.infer<typeof EntityIdSchema>;
+export type IdType = z.infer<typeof IdSchema>;
 export type EntityStorageType = z.infer<typeof EntityStorageSchema>;
 export type EntityType = z.infer<typeof EntitySchema>;
 export type EntityChannelType = z.infer<typeof EntityChannelSchema>;

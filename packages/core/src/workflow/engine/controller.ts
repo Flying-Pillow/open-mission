@@ -10,8 +10,8 @@ import type {
     AgentPrompt,
     AgentExecutionReference,
     AgentExecutionType
-} from '../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
-import type { AgentExecutionSignalDecision } from '../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+} from '../../entities/AgentExecution/AgentExecutionSchema.js';
+import type { AgentExecutionSignalDecision } from '../../entities/AgentExecution/AgentExecutionSchema.js';
 import {
     buildWorkflowTaskGenerationRequests,
     createWorkflowConfigurationSnapshot,

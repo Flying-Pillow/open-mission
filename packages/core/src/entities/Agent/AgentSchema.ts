@@ -3,7 +3,7 @@ import { EntitySchema, EntityStorageSchema } from '../Entity/EntitySchema.js';
 import {
     AgentExecutionLaunchModeSchema,
     AgentExecutionReasoningEffortSchema
-} from '../AgentExecution/protocol/AgentExecutionProtocolSchema.js';
+} from '../AgentExecution/AgentExecutionCommunicationSchema.js';
 
 export const agentEntityName = 'Agent' as const;
 

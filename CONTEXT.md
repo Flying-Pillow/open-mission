@@ -46,7 +46,7 @@ The local checked-out Git repository, preferably on the main branch, that the Op
 _Avoid_: GitHub repository, mission worktree, workspace
 
 **Repository root**:
-The filesystem root path of a Repository.
+The filesystem root path of a Repository. Because configured filesystem discovery is the Repository backing table, the Repository root is the Repository's durable identity source, not a replaceable display path.
 _Avoid_: workspace root, mission worktree root
 
 **Repository control state**:
@@ -104,8 +104,8 @@ A per-Open Mission daemon runtime module that accepts validated Mission runtime 
 _Avoid_: Mission state store, MissionState, MissionRuntimeDossier, JSON live store
 
 **Mission runtime schema version**:
-The schema version of Mission runtime data; it versions the persisted workflow runtime data as a whole, not each Agent execution context or Mission artifact separately.
-_Avoid_: agent execution context version, artifact version, surface protocol version
+The schema version of Mission runtime data; it versions the persisted workflow runtime data as a whole, not each Agent execution journal or Mission artifact separately.
+_Avoid_: agent execution journal version, artifact version, surface protocol version
 
 **Mission runtime migration**:
 A deliberate, separately decided replacement of one Mission runtime data layout with another. It is not an implicit fallback parser, load-time normalizer, or hidden compatibility shim.
@@ -156,20 +156,24 @@ An executable unit of Mission work with instructions, dependencies, lifecycle st
 _Avoid_: job, step, todo
 
 **Agent execution**:
-A daemon-owned in-memory Entity instance representing one running or recoverable execution of one Agent under an explicit Agent execution scope. It owns execution identity, process lifecycle, structured messages, accepted signals, durable context, and serializable Entity state. A Terminal may be attached as an optional transport, but it is not the Agent execution.
+A daemon-owned in-memory Entity instance representing one running or recoverable execution of one Agent under an explicit owning Entity reference. It owns execution identity, process lifecycle, structured messages, accepted signals, journal state, and serializable Entity state. A Terminal may be attached as an optional transport, but it is not the Agent execution.
 _Avoid_: chat, terminal, env-based routing, AgentExecutor-owned lifecycle
 
 **Agent execution process**:
 The OS process or process-like provider session owned by an Agent execution instance, including launch command, args, working directory, process id when available, exit state, and process lifecycle operations.
 _Avoid_: terminal, runtime session, adapter lifecycle owner, AgentExecutor process
 
-**Agent execution scope**:
-The daemon-owned attachment context for one Agent execution. Supported scopes are system, repository, mission, task, and artifact. Mission and task are scopes, not mandatory Agent execution roots.
-_Avoid_: implicit mission ownership, required task execution, env-based routing
+**Agent execution owner reference**:
+The daemon-owned owner discriminator and owner id for one Agent execution. Supported owner kinds are system, repository, mission, task, and artifact.
+_Avoid_: implicit mission ownership, required task execution, env-based routing, opaque string parsing
 
-**Agent execution context**:
-The durable daemon-managed set of artifacts, Entity references, and instructions made available to an Agent execution, including their roles and ordering.
-_Avoid_: prompt text, loose context, implicit context, Mission task list order
+**Agent execution journal**:
+The daemon-owned canonical journal for one Agent execution. It records the ordered inputs, artifact references, Entity references, instructions, observations, decisions, and effects that define the execution over time.
+_Avoid_: prompt text, loose context, implicit context, terminal transcript, chat transcript
+
+**Context window**:
+The model-facing prompt capacity of an Agent runtime. This term is reserved for the Agent's prompt/window semantics and must not be used as the canonical name for AgentExecution-owned state.
+_Avoid_: Agent execution journal, terminal transcript, interaction ledger
 
 **Agent execution token**:
 A daemon-issued opaque token that identifies and authorizes one registered Agent execution over the structured transport.
@@ -212,7 +216,7 @@ The raw PTY audit record for one terminal-backed Agent execution, including inpu
 _Avoid_: interaction journal, chat transcript, workflow event log, Agent execution state
 
 **Agent execution message descriptor**:
-A daemon-published description of one supported Agent execution message, including its type, label, input shape, delivery behavior, and whether it mutates Agent execution context.
+A daemon-published description of one supported Agent execution message, including its type, label, input shape, delivery behavior, and whether it appends to or mutates Agent execution journal state.
 _Avoid_: boolean capability, UI method, runtime method
 
 **Agent execution interaction posture**:
@@ -276,7 +280,7 @@ The daemon-owned local MCP server named `open-mission-mcp` that exposes Agent si
 _Avoid_: remote mission API, MCP-owned workflow, task session server, provider-specific signal model
 
 **Agent execution semantic operation**:
-A read-only daemon-owned operation exposed to one registered Agent execution through `open-mission-mcp`, such as Artifact reads, code search, symbol context, impact analysis, route impact, or tool context. It resolves authority from Agent execution scope, validates operation input, delegates to the owning daemon service, returns structured context, and records a bounded Agent execution fact.
+A read-only daemon-owned operation exposed to one registered Agent execution through `open-mission-mcp`, such as Artifact reads, code search, symbol context, impact analysis, route impact, or tool context. It resolves authority from the Agent execution owner reference and launch location, validates operation input, delegates to the owning daemon service, returns structured context, and records a bounded Agent execution fact.
 _Avoid_: Entity command, raw repository API, workflow mutation, arbitrary filesystem tool, public MCP tool
 
 **Code root**:
@@ -386,7 +390,7 @@ Legacy phrase for outboard daemon-side Entity execution code. Prefer **Entity cl
 _Avoid_: schema, model, facade, behavior owner
 
 **Mission state store**:
-The daemon-owned datastore that persists canonical Entity storage records, Mission runtime data, Agent execution context, and durable Mission coordination state.
+The daemon-owned datastore that persists canonical Entity storage records, Mission runtime data, Agent execution journal state, and durable Mission coordination state.
 _Avoid_: cache, replica, projection store, surface database
 
 **Mission state**:
@@ -492,7 +496,7 @@ The Open Mission app-resolved companion work bundle derived from raw Mission con
 _Avoid_: filename heuristic, tree-order heuristic, persisted pane state
 
 **Mission surface preference**:
-An Open Mission surface/client-local affordance such as panel sizes, selected stage tab, or temporary focus that does not change Mission runtime data, Entity storage records, or Agent execution context.
+An Open Mission surface/client-local affordance such as panel sizes, selected stage tab, or temporary focus that does not change Mission runtime data, Entity storage records, or Agent execution journal state.
 _Avoid_: durable Mission state, daemon preference, workflow setting
 
 **Derived workflow state**:
@@ -506,7 +510,7 @@ _Avoid_: workflow projection, stage projection
 - An **Open Mission native host** consumes daemon and **Open Mission app model layer** contracts; it does not own Mission truth.
 - A live **Mission** is executed by exactly one **Running Mission instance** in the daemon.
 - A **Repository** may have one **GitHub repository ref**.
-- A **Repository** has exactly one **Repository root**.
+- A **Repository** has exactly one **Repository root**, and that root is its filesystem-backed identity in the current system model.
 - **Repository control state** belongs to exactly one **Repository**.
 - A **Repository** may define one **Mission workflow definition** used by its **Running Mission instances**.
 - A **Repository settings document** contains **Repository workflow settings**.
@@ -530,7 +534,7 @@ _Avoid_: workflow projection, stage projection
 - A **Mission dossier state store** validates and checkpoints Mission runtime data changes for one **Mission dossier**.
 - A filesystem adapter may read and write raw Mission dossier files, but it does not validate **Mission runtime data**.
 - **Mission runtime data** has one **Mission runtime schema version**.
-- A **Mission runtime schema version** applies to the whole persisted Mission runtime data, not separately to **Agent execution context** or **Mission artifacts**.
+- A **Mission runtime schema version** applies to the whole persisted Mission runtime data, not separately to **Agent execution journal** state or **Mission artifacts**.
 - A **Mission runtime migration**, if introduced by an explicit future decision, belongs to the daemon persistence layer and must run outside ordinary State store hydration.
 - A **Mission** has one or more **Mission stages**.
 - A **Mission stage** status is derived from its **Mission tasks**.
@@ -541,31 +545,31 @@ _Avoid_: workflow projection, stage projection
 - A **Stage-level artifact** belongs to one **Mission stage**.
 - A **Task-level artifact** belongs to one **Mission task**.
 - A **Mission task** belongs to exactly one **Mission stage**.
-- An **Agent execution** belongs to one explicit **Agent execution scope**: system, repository, mission, task, or artifact.
-- A task-scoped **Agent execution** belongs to one **Mission task**; mission, repository, system, and artifact scopes do not imply a task.
-- An **Agent execution context** belongs to one **Agent execution**.
-- An **Agent execution context** contains explicit artifact and Entity references; it is not inferred from prompt text.
-- An **Agent execution context** owns the order of artifacts and instructions made available to its **Agent execution**.
+- An **Agent execution** belongs to one explicit **Agent execution owner reference**: system, repository, mission, task, or artifact. Repository-owned Agent executions use the Repository root as the repository owner identity because the filesystem is the Repository backing table.
+- A task-owned **Agent execution** belongs to one **Mission task**; mission-owned, repository-owned, system-owned, and artifact-owned executions do not imply a task.
+- An **Agent execution journal** belongs to one **Agent execution**.
+- An **Agent execution journal** contains the ordered inputs, artifact references, Entity references, instructions, observations, decisions, and effects for its **Agent execution**.
+- The term **context** is reserved for an Agent's **context window** and must not be used as the canonical name for **Agent execution** state.
 - An **Agent execution message** is accepted through the daemon, not by writing raw text directly into an Agent execution terminal; the daemon resolves the session from its token instead of env-passed ids.
-- **Agent adapter delivery** is best-effort and must not be treated as proof that an **Agent execution** applied a context change.
+- **Agent adapter delivery** is best-effort and must not be treated as proof that an **Agent execution** applied a journaled change.
 - An **Agent execution message** is not a first-class durable Entity unless the Open Mission system later needs queryable structured message history.
-- An **Agent execution log** records delivered Agent execution interaction, while **Agent execution context** records lasting context state.
+- The **Agent execution journal** is the canonical ordered state/history for an **Agent execution**; raw **Agent execution logs** and terminal recordings remain separate audit material.
 - An **Agent execution log** is daemon-owned audit material, not an **Artifact** by default.
 - An **Agent execution semantic operation** belongs to one registered **Agent execution** and is authorized through that Agent execution's `open-mission-mcp` access.
 - An **Agent execution semantic operation** records a bounded **Agent execution fact** when it reads meaningful context.
-- A code intelligence semantic operation may read a **Code intelligence index** only for the **Code root** resolved from the **Agent execution scope**.
+- A code intelligence semantic operation may read a **Code intelligence index** only for the **Code root** resolved from the Agent execution owner reference and launch location.
 - An **Agent-session artifact** may reference or extract from an **Agent execution log** when the daemon or operator promotes useful material into Mission work.
 - An **Agent execution message** describes a structured message supported by an Agent execution's Agent adapter.
 - An **Agent execution token** is the daemon-issued identifier used for structured transport and registration.
 - An **Agent execution message descriptor** is the source of truth for which structured controls a surface may offer for an **Agent execution**.
-- A task-scoped **Agent execution** receives mandatory **Mission protocol marker** instructions in its initial prompt.
+- A task-owned **Agent execution** receives mandatory **Mission protocol marker** instructions in its initial prompt.
 - An **Agent message shorthand** is not canonical; it parses into an **Agent execution message** backed by an **Agent execution message descriptor** or daemon-owned context operation.
 - An **Agent message shorthand parser** belongs to the daemon; surfaces may offer autocomplete or previews but do not define canonical parse results.
 - Base **Agent execution messages** are common across Agent adapters; Agent child adapters may advertise additional supported messages.
-- Daemon-owned context messages may update **Agent execution context** before any optional delivery to an Agent adapter.
-- A daemon-accepted **Agent execution context** mutation is canonical even when related **Agent adapter delivery** fails, is ignored, or receives no structured response.
-- Agent responses may be recorded as **Agent execution log** observations, but they must not be used as authoritative context state unless modeled as separate daemon-validated state.
-- **Terminal input** is reserved for direct CLI interaction and does not define canonical Agent execution context.
+- Daemon-accepted Agent execution messages may append to or mutate **Agent execution journal** state before any optional delivery to an Agent adapter.
+- A daemon-accepted **Agent execution journal** mutation is canonical even when related **Agent adapter delivery** fails, is ignored, or receives no structured response.
+- Agent responses may be recorded as **Agent execution log** observations, but they must not be used as authoritative journal state unless modeled as separate daemon-validated state.
+- **Terminal input** is reserved for direct CLI interaction and does not define canonical **Agent execution journal** state.
 - An **External agent prompt field** always submits an **Agent execution message**; only focused terminal interaction sends **Terminal input**.
 - An **Agent-session artifact** belongs to one **Agent execution**.
 - Raw **Agent execution logs** do not appear as Artifacts by default.
@@ -613,38 +617,38 @@ _Avoid_: workflow projection, stage projection
 - A **Mission control selection** is not durable Mission coordination state and must not be shared as the current focus for every surface.
 - A **Raw mission control selection** resolves to one **Resolved mission control selection** for companion panes.
 - **Resolved mission control selection** is derived view state; it is not persisted as pane state.
-- Agent execution context artifacts are displayed from **Agent execution context** and Entity relationships; **Agent execution context** owns ordered artifact references.
+- Agent execution journal artifact references are displayed from the **Agent execution journal** and Entity relationships; the **Agent execution journal** owns their canonical order.
 - **Entity events** update client-side Entity instances; **Mission control view** updates daemon-derived Mission status and workflow snapshots.
 - **Derived workflow state** is recomputed from **Mission task** progress and is not independently edited.
 
 ## Architecture Boundaries
 
-### Agent Execution Context Synchronization
+### Agent Execution Journal Synchronization
 
-- The Open Mission daemon is the single source of truth for Agent execution context and Mission artifact state.
-- Open Mission surfaces and panes subscribe to daemon-driven updates and never own or persist Agent execution context independently.
+- The Open Mission daemon is the single source of truth for Agent execution journal state and Mission artifact state.
+- Open Mission surfaces and panes subscribe to daemon-driven updates and never own or persist Agent execution journal state independently.
 - Updates are daemon-published: the daemon notifies all surfaces of changes, ensuring multi-pane consistency.
 - Surfaces may send selection or action hints, but the daemon resolves and rebroadcasts canonical state.
 
-### Agent Execution Context Ordering
+### Agent Execution Journal Ordering
 
-- Agent execution context ordering is durable Agent execution state managed by the daemon.
-- The order of artifacts and instructions in Agent execution context is part of the Agent execution's working context and audit trail.
-- Reordering Agent execution context must call daemon commands that mutate Agent execution context.
+- Agent execution journal ordering is durable Agent execution state managed by the daemon.
+- The order of inputs, artifact references, instructions, observations, decisions, and effects in the Agent execution journal is part of the Agent execution's working state and audit trail.
+- Reordering or appending canonical Agent execution journal state must call daemon commands that mutate the Agent execution journal.
 
 ### Agent Adapter Delivery
 
 - Agent executions are indeterministic and may ignore, misunderstand, or fail to structurally acknowledge delivered messages.
-- Agent execution context mutations become canonical when accepted by the daemon, not when acknowledged by the Agent adapter.
+- Agent execution journal mutations become canonical when accepted by the daemon, not when acknowledged by the Agent adapter.
 - Agent adapter delivery is optional, descriptor-defined, and best-effort.
-- Mission must distinguish daemon-accepted context mutation, runtime delivery attempt, runtime output observation, and operator/system interpretation of that output.
+- Mission must distinguish daemon-accepted journal mutation, runtime delivery attempt, runtime output observation, and operator/system interpretation of that output.
 - Agent adapter responses are observations in the Agent execution log unless a future daemon-validated state model explicitly promotes them.
 
 ### Agent Execution Semantic Operations And Code Intelligence
 
 - `open-mission-mcp` may expose Agent execution semantic operations alongside Agent signal tools for registered Agent executions.
 - Agent execution semantic operations are read-only by default and must not mutate Entity storage records, Mission workflow state, repository files, Git refs, or Open Mission surface state.
-- Semantic operation availability is scoped by Agent execution scope, selected Agent adapter capability, daemon policy, and operation-specific requirements.
+- Semantic operation availability is determined by the Agent execution owner reference, selected Agent adapter capability, daemon policy, and operation-specific requirements.
 - The Mission MCP bridge must proxy semantic operation inputs directly; it must not assume every MCP tool is an Agent signal payload.
 - Code intelligence belongs to a daemon-owned Code intelligence service and Code graph store, not to MCP handlers or Open Mission surfaces.
 - Code intelligence indexes are rebuildable read models over Code roots and must report staleness when stale data could affect the answer.
@@ -668,23 +672,23 @@ _Avoid_: workflow projection, stage projection
 - Selection is not durable Mission coordination state; one operator's current focus must not change every other surface's current focus.
 - Shared Mission navigation state belongs in canonical Entity relationships, not selection.
 
-### Agent Execution Context Lifecycle
+### Agent Execution Journal Lifecycle
 
 - When an Agent execution ends through completion, cancellation, or termination, the daemon updates session state and disposes runtime resources.
 - Agent execution logs are flushed and persisted as daemon-owned audit material; they are not deleted automatically and they are not Mission artifacts by default.
 - Curated outputs derived from Agent execution logs become Agent-session artifacts only through an explicit daemon or operator promotion action.
-- Mission artifacts referenced by Agent execution context are retained unless explicitly deleted by operator action or workflow.
+- Mission artifacts referenced by the Agent execution journal are retained unless explicitly deleted by operator action or workflow.
 - Surfaces update reactively; cleanup and retention logic is daemon-owned.
 
-### Concurrent Agent Execution Context Updates
+### Concurrent Agent Execution Journal Updates
 
-- The Open Mission daemon serializes Agent execution context and Mission artifact updates.
+- The Open Mission daemon serializes Agent execution journal and Mission artifact updates.
 - Concurrent updates are resolved by last-write-wins; there is no explicit locking, merge strategy, or user-facing conflict resolution.
 - Surfaces must reactively update to reflect the latest daemon state.
 
 ### Mission Workflow Runtime Schema Versioning
 
-- Agent execution context and Mission artifacts do not have independent persisted schema versions today.
+- Agent execution journal state and Mission artifacts do not have independent persisted schema versions today.
 - Persisted workflow runtime state is versioned by the **Mission runtime schema version** on the **Mission runtime data**.
 - The daemon persistence layer rejects unsupported Mission runtime schema versions instead of allowing surfaces to interpret stale state.
 - Future replacements of Mission runtime data layouts require explicit **Mission runtime migrations** or conversion commands; ordinary State store hydration rejects invalid data and does not repair it.
@@ -692,7 +696,7 @@ _Avoid_: workflow projection, stage projection
 
 ### Mission State Store And Surface Replication
 
-- The Mission state store is the canonical owner of Entity storage records, Mission runtime data, Agent execution context, and other durable Mission coordination state.
+- The Mission state store is the canonical owner of Entity storage records, Mission runtime data, Agent execution journal state, and other durable Mission coordination state.
 - The current **Mission dossier state store** is a narrower per-Mission runtime module and must not be treated as the daemon-wide Mission state store.
 - Mission state store schemas are written with Zod v4 and live in schema modules separate from state store adapter classes. Any shape that needs validation must have a Zod v4 schema as the source of truth, and exported TypeScript data types for validated shapes must be inferred with `z.infer` from those schemas. This keeps validation local to the Mission state store interface and prepares the same shapes for future SurrealDB database schema generation or mapping.
 - The State store transaction is a small atomic write boundary for the Mission state store. Entity input commands, workflow commands, and daemon-owned domain intent are validated and applied through State store transactions before records change.
@@ -731,7 +735,7 @@ _Avoid_: workflow projection, stage projection
 - Entity behavior was described as if an outboard **Entity adapter** satisfied remote methods. Resolved: the **Entity class** is the behavior owner, while the **Entity contract** holds remote method metadata.
 - "Projection" was used for old coarse-grained mission synchronization, Open Mission pane data, and workflow-derived state. Resolved: **Projection** is legacy/transition vocabulary; use **System snapshot**, **Entity event**, **Open Mission app pane view**, **Mission control view**, or **Derived workflow state**.
 - "Prompt" was used for both raw CLI input and structured operator intent. Resolved: use **Terminal input** for raw CLI bytes and **Agent execution message** or **Agent execution message** for structured daemon-mediated input.
-- Agent execution messages could be mistaken for a new durable Entity. Resolved: session logs record delivered interaction, and **Agent execution context** records lasting context state; no separate message Entity is canonical yet.
+- Agent execution messages could be mistaken for a new durable Entity. Resolved: the **Agent execution journal** records canonical ordered execution state, while raw session logs record audit material; no separate message Entity is canonical yet.
 - Agent adapter support was described with broad boolean capabilities. Resolved: use **Agent execution message descriptors** to advertise supported structured messages and their input shapes.
-- Slash commands can look like canonical commands. Resolved: slash commands are **Agent message shorthand** that parse into structured messages or context operations.
+- Slash commands can look like canonical commands. Resolved: slash commands are **Agent message shorthand** that parse into structured messages or daemon-managed journal mutations.
 - `MissionState` can look like a concrete schema name. Resolved: **Mission state** is only an informal umbrella phrase; schema-facing code names the concrete **Mission runtime data** as `MissionRuntimeData`.

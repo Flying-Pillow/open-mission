@@ -133,7 +133,7 @@ const missionData = {
     },
     type: 'refactor',
     branchRef: 'mission/mission-1',
-    missionDir: '/mission/.mission/missions/mission-1',
+    missionDir: '/mission/.open-mission/missions/mission-1',
     missionRootDir: '/mission',
     lifecycle: 'running',
     currentStageId: 'implementation',

@@ -7,9 +7,10 @@
     "access": "public"
   },
   "scripts": {
-    "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./build/workflow/engine/copyTemplateFiles.js",
+    "build": "pnpm run generate:surql && rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./build/workflow/engine/copyTemplateFiles.js && mkdir -p build/lib/database && cp src/lib/database/*.surql build/lib/database/",
     "check": "tsc --noEmit -p tsconfig.json",
-    "dev": "OPEN_MISSION_DAEMON_RUNTIME_MODE=source tsx --watch --tsconfig ./tsconfig.json ./src/daemon/open-missiond.ts run --dev",
+    "dev": "pnpm run generate:surql && OPEN_MISSION_DAEMON_RUNTIME_MODE=source tsx --watch --tsconfig ./tsconfig.json ./src/daemon/open-missiond.ts run --dev",
+    "generate:surql": "pnpm --filter @flying-pillow/zod-surreal run build && tsx --tsconfig ./tsconfig.json ./scripts/generate-surql.ts",
     "lint": "vp lint src",
     "test": "vp test run --config vitest.config.ts"
   },

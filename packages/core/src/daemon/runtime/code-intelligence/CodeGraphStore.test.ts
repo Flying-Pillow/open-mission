@@ -16,10 +16,7 @@ describe('CodeGraphStore', () => {
         ].join('\n'));
         await fs.writeFile(path.join(rootPath, 'src', 'message.ts'), 'export const makeGreeting = () => "hello";');
 
-        const surrealStore = DaemonSurrealStore.inMemory({
-            namespace: 'mission_code_graph_store_test',
-            database: 'code_intelligence'
-        });
+        const surrealStore = DaemonSurrealStore.inMemory();
         await surrealStore.start();
 
         try {

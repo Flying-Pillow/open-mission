@@ -50,9 +50,9 @@ describe('MissionRegistry', () => {
 		const missionWorktreeRoot = repositoryAdapter.getMissionWorktreePath('1-prepare-repo-for-mission');
 		const missionAdapter = new MissionDossierFilesystem(missionWorktreeRoot);
 		const missionDir = missionAdapter.getTrackedMissionDir('1-prepare-repo-for-mission', missionWorktreeRoot);
-		await fs.mkdir(path.join(missionWorktreeRoot, '.mission'), { recursive: true });
+		await fs.mkdir(path.join(missionWorktreeRoot, '.open-mission'), { recursive: true });
 		await fs.writeFile(
-			path.join(missionWorktreeRoot, '.mission', 'settings.json'),
+			path.join(missionWorktreeRoot, '.open-mission', 'settings.json'),
 			`${JSON.stringify({
 				missionsRoot: path.join(repositoryRoot, 'mission-worktrees'),
 				trackingProvider: 'github',
@@ -97,7 +97,7 @@ describe('MissionRegistry', () => {
 				operationalMode: 'invalid',
 				invalidState: {
 					code: 'invalid-settings-document',
-					path: path.join(invalidRepositoryRoot, '.mission', 'settings.json'),
+					path: path.join(invalidRepositoryRoot, '.open-mission', 'settings.json'),
 					message: 'Invalid input'
 				},
 				isInitialized: false
@@ -124,9 +124,9 @@ describe('MissionRegistry', () => {
 	it('skips mission hydration when the repository workflow definition is out of date', async () => {
 		const workspaceRoot = await createTempWorkspace();
 		const adapter = new MissionDossierFilesystem(workspaceRoot);
-		await fs.mkdir(path.join(workspaceRoot, '.mission', 'workflow'), { recursive: true });
+		await fs.mkdir(path.join(workspaceRoot, '.open-mission', 'workflow'), { recursive: true });
 		await fs.writeFile(
-			path.join(workspaceRoot, '.mission', 'workflow', 'workflow.json'),
+			path.join(workspaceRoot, '.open-mission', 'workflow', 'workflow.json'),
 			`${JSON.stringify({
 				autostart: { mission: false },
 				humanInLoop: { enabled: false, pauseOnMissionStart: false },
@@ -162,7 +162,7 @@ describe('MissionRegistry', () => {
 				repositoryRootPath: workspaceRoot,
 				invalidState: expect.objectContaining({
 					code: 'invalid-workflow-definition',
-					path: path.join(workspaceRoot, '.mission', 'workflow', 'workflow.json')
+					path: path.join(workspaceRoot, '.open-mission', 'workflow', 'workflow.json')
 				})
 			})
 		);
@@ -172,9 +172,9 @@ describe('MissionRegistry', () => {
 async function createTempWorkspace(): Promise<string> {
 	const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-service-'));
 	temporaryWorkspaceRoots.add(workspaceRoot);
-	await fs.mkdir(path.join(workspaceRoot, '.mission'), { recursive: true });
+	await fs.mkdir(path.join(workspaceRoot, '.open-mission'), { recursive: true });
 	await fs.writeFile(
-		path.join(workspaceRoot, '.mission', 'settings.json'),
+		path.join(workspaceRoot, '.open-mission', 'settings.json'),
 		`${JSON.stringify({
 			missionsRoot: path.join(workspaceRoot, 'mission-worktrees'),
 			trackingProvider: 'github',

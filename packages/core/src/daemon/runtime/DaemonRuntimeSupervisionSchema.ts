@@ -1,5 +1,4 @@
 import { z } from 'zod/v4';
-import { AgentExecutionScopeSchema } from '../../entities/AgentExecution/AgentExecutionSchema.js';
 
 export const DaemonRuntimeOwnerReferenceSchema = z.discriminatedUnion('kind', [
     z.object({
@@ -24,7 +23,6 @@ export const DaemonRuntimeOwnerReferenceSchema = z.discriminatedUnion('kind', [
         kind: z.literal('agent-execution'),
         ownerId: z.string().trim().min(1),
         agentExecutionId: z.string().trim().min(1),
-        scope: AgentExecutionScopeSchema.optional(),
     }).strict(),
 ]).describe('Daemon-owned runtime owner identity used for cleanup, reconciliation, and ownership traversal.');
 

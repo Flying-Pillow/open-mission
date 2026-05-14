@@ -1,5 +1,7 @@
+import * as path from 'node:path';
 import { DaemonSurrealStore } from '../DaemonSurrealStore.js';
-import { CodeGraphStore, type CodeGraphIndexReadModel } from './CodeGraphStore.js';
+import { CodeGraphStore } from './CodeGraphStore.js';
+import type { CodeGraphIndexReadModel } from './CodeGraphSchema.js';
 import { CodeIndexer } from './CodeIndexer.js';
 
 export type EnsureCodeIndexInput = {
@@ -17,13 +19,14 @@ export class CodeIntelligenceService {
     private readonly indexer: CodeIndexer;
     private readonly createSurrealStore: (input: EnsureCodeIndexInput) => DaemonSurrealStore;
     private readonly manageSurrealStoreLifecycle: boolean;
+    private readonly cachedSurrealStores = new Map<string, DaemonSurrealStore>();
 
     public constructor(options: CodeIntelligenceServiceOptions = {}) {
         this.indexer = options.indexer ?? new CodeIndexer();
         this.createSurrealStore = options.surrealStore
             ? () => options.surrealStore as DaemonSurrealStore
-            : options.createSurrealStore ?? ((input) => DaemonSurrealStore.forCodeRoot({ rootPath: input.rootPath }));
-        this.manageSurrealStoreLifecycle = options.manageSurrealStoreLifecycle ?? !options.surrealStore;
+            : options.createSurrealStore ?? ((input) => this.getOrCreateSurrealStore(input.rootPath));
+        this.manageSurrealStoreLifecycle = options.manageSurrealStoreLifecycle ?? Boolean(options.createSurrealStore);
     }
 
     public async ensureIndex(input: EnsureCodeIndexInput): Promise<CodeGraphIndexReadModel> {
@@ -59,5 +62,23 @@ export class CodeIntelligenceService {
         if (this.manageSurrealStoreLifecycle) {
             await surrealStore.stop();
         }
+    }
+
+    public async stop(): Promise<void> {
+        const stores = Array.from(this.cachedSurrealStores.values());
+        this.cachedSurrealStores.clear();
+        await Promise.all(stores.map((surrealStore) => surrealStore.stop()));
+    }
+
+    private getOrCreateSurrealStore(rootPath: string): DaemonSurrealStore {
+        const key = path.resolve(rootPath.trim());
+        const existing = this.cachedSurrealStores.get(key);
+        if (existing) {
+            return existing;
+        }
+
+        const store = DaemonSurrealStore.forCodeRoot({ rootPath });
+        this.cachedSurrealStores.set(key, store);
+        return store;
     }
 }

@@ -21,7 +21,7 @@ const taskState: TaskDossierRecordType = {
     agent: 'copilot-cli',
     retries: 0,
     fileName: '01.md',
-    filePath: '/mission/.mission/tasks/01.md',
+    filePath: '/mission/.open-mission/tasks/01.md',
     relativePath: 'implementation/tasks/01.md'
 };
 

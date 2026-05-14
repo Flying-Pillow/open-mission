@@ -12,7 +12,7 @@ import { Agent } from '../../entities/Agent/Agent.js';
 import { AgentRegistry } from '../../entities/Agent/AgentRegistry.js';
 import type { WorkflowTaskRuntimeState, WorkflowRequest } from './types.js';
 import type { TaskDossierRecordType } from '../../entities/Task/TaskSchema.js';
-import type { AgentExecutionReference } from '../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import type { AgentExecutionReference } from '../../entities/AgentExecution/AgentExecutionSchema.js';
 import type { AgentExecution } from '../../entities/AgentExecution/AgentExecution.js';
 
 function createDescriptor(): MissionDescriptor {
@@ -157,7 +157,7 @@ describe('WorkflowRequestExecutor', () => {
 			agent: 'copilot',
 			retries: 0,
 			fileName: '01-from-artifact.md',
-			filePath: '/tmp/mission-17/.mission/missions/mission-17/03-IMPLEMENTATION/tasks/01-from-artifact.md',
+			filePath: '/tmp/mission-17/.open-mission/missions/mission-17/03-IMPLEMENTATION/tasks/01-from-artifact.md',
 			relativePath: '03-IMPLEMENTATION/tasks/01-from-artifact.md'
 		};
 		const adapter = {
@@ -234,7 +234,7 @@ describe('WorkflowRequestExecutor', () => {
 						agent: 'copilot',
 						retries: 0,
 						fileName: '01-from-artifact.md',
-						filePath: '/tmp/mission-17/.mission/missions/mission-17/03-IMPLEMENTATION/tasks/01-from-artifact.md',
+						filePath: '/tmp/mission-17/.open-mission/missions/mission-17/03-IMPLEMENTATION/tasks/01-from-artifact.md',
 						relativePath: '03-IMPLEMENTATION/tasks/01-from-artifact.md'
 					} satisfies TaskDossierRecordType]
 					: [],
@@ -539,7 +539,7 @@ describe('WorkflowRequestExecutor', () => {
 				agent: 'fake-adapter',
 				retries: 0,
 				fileName: '03-align-workflow-request-execution-with-unified-runtime.md',
-				filePath: '/tmp/mission-17/.mission/missions/mission-17/03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md',
+				filePath: '/tmp/mission-17/.open-mission/missions/mission-17/03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md',
 				relativePath: '03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md'
 			}),
 			getMissionWorkspacePath: (missionDir: string) => missionDir
@@ -574,7 +574,7 @@ describe('WorkflowRequestExecutor', () => {
 		});
 
 		expect(agentAdapter.getLastStartRequest()?.initialPrompt?.text).toContain(
-			'Here are your instructions: @/tmp/mission-17/.mission/missions/mission-17/03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md'
+			'Here are your instructions: @/tmp/mission-17/.open-mission/missions/mission-17/03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md'
 		);
 		expect(agentAdapter.getLastStartRequest()?.initialPrompt?.text).toContain(
 			'Perform the task exactly as specified in <03-align-workflow-request-execution-with-unified-runtime.md>.'
@@ -597,7 +597,7 @@ describe('WorkflowRequestExecutor', () => {
 				agent: 'fake-adapter',
 				retries: 0,
 				fileName: '03-align-workflow-request-execution-with-unified-runtime.md',
-				filePath: '/tmp/mission-17/.mission/missions/mission-17/03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md',
+				filePath: '/tmp/mission-17/.open-mission/missions/mission-17/03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md',
 				relativePath: '03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md'
 			}),
 			getMissionWorkspacePath: (missionDir: string) => missionDir

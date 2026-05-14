@@ -1,11 +1,10 @@
 import * as path from 'node:path';
-import { getOpenMissionRuntimeDirectory } from '../../settings/OpenMissionInstall.js';
 import { JsonFileAdapter } from '../../lib/formats/JsonFileAdapter.js';
 import { EntityTableSchema, type EntityStore } from './EntitySchema.js';
 
 export class FilesystemEntityStore implements EntityStore {
     public constructor(
-        private readonly rootPath = path.join(getOpenMissionRuntimeDirectory(), 'entities'),
+        private readonly rootPath = path.join(getOpenMissionRuntimeDirectoryPath(), 'entities'),
         private readonly jsonFiles = new JsonFileAdapter()
     ) { }
 
@@ -43,4 +42,12 @@ export class FilesystemEntityStore implements EntityStore {
     private getTablePath(table: string): string {
         return path.join(this.rootPath, `${EntityTableSchema.parse(table)}.json`);
     }
+}
+
+function getOpenMissionRuntimeDirectoryPath(): string {
+    const configuredPath = process.env['OPEN_MISSION_CONFIG_DIR']?.trim();
+    const configDirectory = configuredPath
+        ? path.resolve(configuredPath)
+        : path.join(process.env['XDG_CONFIG_HOME']?.trim() || path.join(process.env['HOME'] || process.cwd(), '.config'), 'open-mission');
+    return path.join(configDirectory, 'runtime');
 }

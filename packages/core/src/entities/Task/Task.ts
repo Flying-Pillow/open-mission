@@ -4,7 +4,7 @@ import type {
 import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { AgentAdapter } from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
-import type { AgentExecutionType } from '../AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import type { AgentExecutionType } from '../AgentExecution/AgentExecutionSchema.js';
 import type { AgentExecutionLaunchRequestType } from '../AgentExecution/AgentExecutionSchema.js';
 import type { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { AgentExecution } from '../AgentExecution/AgentExecution.js';
@@ -244,22 +244,22 @@ export class Task extends Entity<TaskDataType, string> {
 		};
 	}
 
-	private readonly owner: TaskOwner | undefined;
+	private readonly scope: TaskOwner | undefined;
 	private state: TaskDossierRecordType | undefined;
 
 	public constructor(data: TaskDataType);
-	public constructor(owner: TaskOwner, state: TaskDossierRecordType);
+	public constructor(scope: TaskOwner, state: TaskDossierRecordType);
 	public constructor(ownerOrData: TaskOwner | TaskDataType, state?: TaskDossierRecordType) {
 		if (state) {
 			const owner = ownerOrData as TaskOwner;
 			super(Task.toDataFromState(state, owner.missionId));
-			this.owner = owner;
+			this.scope = scope;
 			this.state = state;
 			return;
 		}
 
 		super(TaskDataSchema.parse(ownerOrData));
-		this.owner = undefined;
+		this.scope = undefined;
 		this.state = undefined;
 	}
 
@@ -667,7 +667,7 @@ export class Task extends Entity<TaskDataType, string> {
 		const state = this.state;
 		const currentStatus = state?.status ?? this.data.lifecycle;
 		const waitingOn = state?.waitingOn ?? this.data.waitingOnTaskIds;
-		const delivered = this.owner?.isMissionDelivered() ?? false;
+		const delivered = this.scope?.isMissionDelivered() ?? false;
 		const evaluation = evaluateMissionTaskStatusIntent(intent, {
 			currentStatus,
 			waitingOn,
@@ -712,10 +712,10 @@ export class Task extends Entity<TaskDataType, string> {
 	}
 
 	private requireOwner(): TaskOwner {
-		if (!this.owner) {
+		if (!this.scope) {
 			throw new Error(`Task '${this.taskId}' is not attached to a Mission owner.`);
 		}
-		return this.owner;
+		return this.scope;
 	}
 
 	private requireState(): TaskDossierRecordType {

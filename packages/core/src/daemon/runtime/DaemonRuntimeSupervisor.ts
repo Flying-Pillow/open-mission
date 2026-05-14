@@ -59,16 +59,6 @@ export class DaemonRuntimeSupervisor {
             const executionOwner = toAgentExecutionOwnerReference(execution);
             owners.set(stableRuntimeReferenceKey(executionOwner), executionOwner);
 
-            const parentOwner = toScopeOwnerReference(execution.scope);
-            if (parentOwner && stableRuntimeReferenceKey(parentOwner) !== stableRuntimeReferenceKey(executionOwner)) {
-                owners.set(stableRuntimeReferenceKey(parentOwner), parentOwner);
-                relationships.push({
-                    parent: parentOwner,
-                    child: executionOwner,
-                    relationship: 'owns-agent-execution'
-                });
-            }
-
             const lease = leasesByOwnerKey.get(stableAgentExecutionOwnerKey(execution.ownerId, execution.agentExecutionId));
             if (lease) {
                 lease.metadata = {
@@ -105,26 +95,7 @@ function toAgentExecutionOwnerReference(entry: AgentExecutionRuntimeSummary['exe
         kind: 'agent-execution',
         ownerId: entry.ownerId,
         agentExecutionId: entry.agentExecutionId,
-        ...(entry.scope ? { scope: entry.scope } : {})
     };
-}
-
-function toScopeOwnerReference(scope: AgentExecutionRuntimeSummary['executions'][number]['scope']): DaemonRuntimeOwnerReference | undefined {
-    if (!scope) {
-        return undefined;
-    }
-    switch (scope.kind) {
-        case 'system':
-            return { kind: 'system', label: scope.label?.trim() || 'system' };
-        case 'repository':
-            return { kind: 'repository', repositoryRootPath: scope.repositoryRootPath };
-        case 'mission':
-            return { kind: 'mission', missionId: scope.missionId };
-        case 'task':
-            return { kind: 'task', missionId: scope.missionId, taskId: scope.taskId, ...(scope.stageId ? { stageId: scope.stageId } : {}) };
-        case 'artifact':
-            return { kind: 'system', label: `artifact:${scope.artifactId}` };
-    }
 }
 
 function stableRuntimeReferenceKey(reference: DaemonRuntimeOwnerReference): string {

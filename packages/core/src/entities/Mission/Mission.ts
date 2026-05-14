@@ -12,7 +12,7 @@ import {
 import type {
 	AgentExecutionLaunchModeType,
 	AgentExecutionReasoningEffortType
-} from '../AgentExecution/protocol/AgentExecutionProtocolSchema.js';
+} from '../AgentExecution/AgentExecutionCommunicationSchema.js';
 import type {
 	AgentExecutionConsoleEventType,
 	AgentExecutionConsoleStateType,
@@ -24,7 +24,7 @@ import { AgentExecutionCommandIds } from '../AgentExecution/AgentExecutionSchema
 import type {
 	AgentCommand,
 	AgentPrompt
-} from '../AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+} from '../AgentExecution/AgentExecutionSchema.js';
 import { AgentExecution } from '../AgentExecution/AgentExecution.js';
 import { AgentExecutionTerminalRecordingWriter } from '../AgentExecution/journal/AgentExecutionTerminalRecordingWriter.js';
 import {
@@ -55,7 +55,7 @@ import type {
 	AgentExecutionType,
 	AgentExecutionObservation,
 	AgentExecutionSignalDecision
-} from '../AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+} from '../AgentExecution/AgentExecutionSchema.js';
 import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import { Artifact } from '../Artifact/Artifact.js';
 import { Task, type TaskConfigureOptions } from '../Task/Task.js';
@@ -1145,13 +1145,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 		request: AgentExecutionLaunchRequestType
 	): Promise<AgentExecutionType> {
 		return this.workflowController.startRuntimeAgentExecution({
-			scope: {
-				kind: 'task',
-				missionId: this.descriptor.missionId,
-				taskId: task.taskId,
-				stageId: task.stage,
-				repositoryRootPath: Repository.getRepositoryRootFromMissionDir(this.descriptor.missionDir)
-			},
+			ownerId: task.taskId,
 			workingDirectory: request.workingDirectory,
 			task: {
 				taskId: task.taskId,

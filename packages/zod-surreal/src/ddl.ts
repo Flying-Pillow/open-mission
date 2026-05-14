@@ -78,7 +78,7 @@ export function compileDefineTableStatement(model: CompiledSurrealModel, context
         ...(model.omitSchemaMode ? [] : [model.schemafull ? 'SCHEMAFULL' : 'SCHEMALESS']),
         ...(model.as ? ['AS', model.as] : []),
         ...(model.permissions ? ['PERMISSIONS', model.permissions] : []),
-        ...(model.comment ? [`COMMENT ${surrealString(model.comment)}`] : [])
+        ...(model.description ? [`COMMENT ${surrealString(model.description)}`] : [])
     ];
     return `${clauses.join(' ')};`;
 }
@@ -103,7 +103,7 @@ export function compileDefineFieldStatement(
         ...(field.default ? ['DEFAULT', field.default] : []),
         ...(field.assertion ? ['ASSERT', field.assertion] : []),
         ...(field.readonly ? ['READONLY'] : []),
-        ...(field.comment ? [`COMMENT ${surrealString(field.comment)}`] : [])
+        ...(field.description ? [`COMMENT ${surrealString(field.description)}`] : [])
     ];
     return `${clauses.join(' ')};`;
 }
@@ -119,8 +119,31 @@ export function compileDefineFieldAndIndexStatements(
     }
 
     return [
-        compileDefineFieldStatementWithContext(model, field, models, context),
+        ...compileDefineFieldStatements(model, field, field.name, models, context),
         ...compileDefineIndexStatements(model, field, context)
+    ];
+}
+
+function compileDefineFieldStatements(
+    model: CompiledSurrealModel,
+    field: CompiledSurrealField,
+    path: string,
+    models: CompiledSurrealModel[],
+    context: DdlCompileContext
+): string[] {
+    if (!field.storage) {
+        return [];
+    }
+
+    return [
+        compileDefineFieldStatementWithContext(model, field, path, models, context),
+        ...Object.values(field.fields ?? {}).flatMap((nested) => compileDefineFieldStatements(
+            model,
+            nested,
+            nestedFieldPath(path, field, nested),
+            models,
+            context
+        ))
     ];
 }
 
@@ -137,6 +160,7 @@ export function compileDefineIndexStatements(
 function compileDefineFieldStatementWithContext(
     model: CompiledSurrealModel,
     field: CompiledSurrealField,
+    path: string,
     models: CompiledSurrealModel[],
     context: DdlCompileContext
 ): string {
@@ -144,7 +168,7 @@ function compileDefineFieldStatementWithContext(
     const clauses = [
         'DEFINE FIELD',
         ...(context.overwrite ? ['OVERWRITE'] : []),
-        surrealFieldPath(field.name),
+        surrealFieldPath(path),
         'ON TABLE',
         surrealIdentifier(model.table),
         ...(field.compute ? ['COMPUTED', field.compute] : []),
@@ -155,7 +179,7 @@ function compileDefineFieldStatementWithContext(
         ...(field.default ? ['DEFAULT', field.default] : []),
         ...(field.assertion ? ['ASSERT', field.assertion] : []),
         ...(field.readonly ? ['READONLY'] : []),
-        ...(field.comment ? [`COMMENT ${surrealString(field.comment)}`] : [])
+        ...(field.description ? [`COMMENT ${surrealString(field.description)}`] : [])
     ];
     return `${clauses.join(' ')};`;
 }
@@ -306,7 +330,7 @@ function appendIndexStatements(
         if (nested.compute) {
             continue;
         }
-        appendIndexStatements(model, nested, `${path}.${nested.name}`, statements, context);
+        appendIndexStatements(model, nested, nestedFieldPath(path, field, nested), statements, context);
     }
 }
 
@@ -322,9 +346,10 @@ function compilePruneStatements(
             continue;
         }
 
-        const validFields = new Set(['id', ...Object.values(model.fields).filter((field) => field.storage).map((field) => field.name)]);
+        const validFields = new Set(['id']);
         const validIndexes = new Set<string>();
         for (const field of Object.values(model.fields).filter((candidate) => candidate.storage)) {
+            collectValidFieldNames(field, field.name, validFields);
             collectValidIndexNames(model, field, field.name, validIndexes, context);
         }
 
@@ -342,6 +367,15 @@ function compilePruneStatements(
     return statements;
 }
 
+function collectValidFieldNames(field: CompiledSurrealField, path: string, validFields: Set<string>): void {
+    validFields.add(path);
+    for (const nested of Object.values(field.fields ?? {})) {
+        if (nested.storage) {
+            collectValidFieldNames(nested, nestedFieldPath(path, field, nested), validFields);
+        }
+    }
+}
+
 function collectValidIndexNames(
     model: CompiledSurrealModel,
     field: CompiledSurrealField,
@@ -357,9 +391,13 @@ function collectValidIndexNames(
     }
     for (const nested of Object.values(field.fields ?? {})) {
         if (!nested.compute) {
-            collectValidIndexNames(model, nested, `${path}.${nested.name}`, validIndexes, context);
+            collectValidIndexNames(model, nested, nestedFieldPath(path, field, nested), validIndexes, context);
         }
     }
+}
+
+function nestedFieldPath(path: string, field: CompiledSurrealField, nested: CompiledSurrealField): string {
+    return field.array ? `${path}.*.${nested.name}` : `${path}.${nested.name}`;
 }
 
 function shouldEmitImplicitFullTextIndex(

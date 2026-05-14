@@ -21,15 +21,15 @@ describe('MissionDossierFilesystem', () => {
 		const adapter = new MissionDossierFilesystem('/tmp/repo');
 		const missionDir = adapter.getTrackedMissionDir('mission-101', '/tmp/repo');
 
-		expect(missionDir).toBe(path.join('/tmp/repo', '.mission', 'missions', 'mission-101'));
+		expect(missionDir).toBe(path.join('/tmp/repo', '.open-mission', 'missions', 'mission-101'));
 		expect(adapter.getWorkflowStateDataPath(missionDir)).toBe(
-			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', 'mission.json')
+			path.join('/tmp/repo', '.open-mission', 'missions', 'mission-101', 'mission.json')
 		);
 		expect(adapter.getMissionStagePath(missionDir, 'prd')).toBe(
-			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', '01-PRD')
+			path.join('/tmp/repo', '.open-mission', 'missions', 'mission-101', '01-PRD')
 		);
 		expect(adapter.getMissionStagePath(missionDir, 'spec')).toBe(
-			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', '02-SPEC')
+			path.join('/tmp/repo', '.open-mission', 'missions', 'mission-101', '02-SPEC')
 		);
 	});
 
@@ -70,7 +70,7 @@ describe('MissionDossierFilesystem', () => {
 
 	it('resolves AgentExecution journal paths separately from terminal recordings', () => {
 		const adapter = new MissionDossierFilesystem('/tmp/repo');
-		const missionDir = path.join('/tmp/repo', '.mission', 'missions', 'mission-1');
+		const missionDir = path.join('/tmp/repo', '.open-mission', 'missions', 'mission-1');
 		const agentJournalPath = adapter.getAgentExecutionJournalRelativePath('agent-execution-1');
 
 		expect(agentJournalPath).toBe('agent-journals/agent-execution-1.interaction.jsonl');
@@ -114,8 +114,8 @@ describe('MissionDossierFilesystem', () => {
 		try {
 			git(workspaceRoot, ['init']);
 			git(workspaceRoot, ['remote', 'add', 'origin', 'git@github.com:Flying-Pillow/connect-four.git']);
-			await fs.mkdir(path.join(workspaceRoot, '.mission'), { recursive: true });
-			await fs.writeFile(path.join(workspaceRoot, '.mission', 'settings.json'), JSON.stringify({
+			await fs.mkdir(path.join(workspaceRoot, '.open-mission'), { recursive: true });
+			await fs.writeFile(path.join(workspaceRoot, '.open-mission', 'settings.json'), JSON.stringify({
 				missionsRoot: path.join(workspaceRoot, 'legacy-worktrees'),
 				trackingProvider: 'github',
 				instructionsPath: '.agents',
@@ -228,7 +228,7 @@ describe('MissionDossierFilesystem', () => {
 					},
 					labels: ['enhancement', 'semantic-model'],
 					metadata: {
-						owner: 'core',
+						scope: 'core',
 						track: 'semantic-model'
 					}
 				},
@@ -252,7 +252,7 @@ describe('MissionDossierFilesystem', () => {
 					},
 					labels: ['enhancement', 'semantic-model'],
 					metadata: {
-						owner: 'core',
+						scope: 'core',
 						track: 'semantic-model'
 					}
 				},

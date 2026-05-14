@@ -66,7 +66,7 @@ const defaultTextAnalyzer = {
 describe('zod-surreal model compilation', () => {
     it('compiles Zod table and field metadata into a deterministic snapshot', () => {
         const ArticleSchema = z.object({
-            author: z.string().register(surrealField, { reference: 'Author', onDelete: 'unset', comment: 'Owning author.' }),
+            author: z.string().register(surrealField, { reference: 'Author', onDelete: 'unset', description: 'Owning author.' }),
             title: z.string().register(surrealField, { type: 'string' }),
             ignoredRuntimeOnlyValue: z.string().optional()
         }).strict().register(surrealTable, {
@@ -119,7 +119,7 @@ describe('zod-surreal model compilation', () => {
                             sensitive: false,
                             storage: true,
                             readonly: false,
-                            comment: 'Owning author.'
+                            description: 'Owning author.'
                         },
                         title: {
                             name: 'title',
@@ -156,7 +156,7 @@ describe('zod-surreal model compilation', () => {
         }).strict().register(surrealTable, {
             table: 'article post',
             schemafull: true,
-            comment: 'Hydrated article record.'
+            description: 'Hydrated article record.'
         });
 
         const snapshot = compileSchema({
@@ -179,14 +179,24 @@ describe('zod-surreal model compilation', () => {
     it('infers Surreal field types from Zod schemas', () => {
         const InferredSchema = z.object({
             title: z.string().register(surrealField, { storage: true }),
+            transformedTitle: z.string().transform((value) => value.trim()).register(surrealField, { storage: true }),
             score: z.number().register(surrealField, { storage: true }),
             count: z.number().int().register(surrealField, { storage: true }),
             enabled: z.boolean().register(surrealField, { storage: true }),
             publishedAt: z.date().register(surrealField, { storage: true }),
+            createdAt: z.string().datetime().register(surrealField, { storage: true }),
+            dueDate: z.string().date().register(surrealField, { storage: true }),
             status: z.enum(['draft', 'published']).register(surrealField, { storage: true }),
+            literalStatus: z.union([z.literal('draft'), z.literal('published')]).register(surrealField, { storage: true }),
+            unionMaybeScore: z.union([z.number().int(), z.null()]).register(surrealField, { storage: true }),
             tags: z.array(z.string()).register(surrealField, { storage: true }),
+            optionalTags: z.array(z.string()).optional().register(surrealField, { storage: true }),
+            optionalElementTags: z.array(z.string().optional()).register(surrealField, { storage: true }),
+            labels: z.set(z.string()).register(surrealField, { storage: true }),
+            coordinates: z.tuple([z.number(), z.number()]).register(surrealField, { storage: true }),
             optionalTitle: z.string().optional().register(surrealField, { storage: true }),
             nullableTitle: z.string().nullable().register(surrealField, { storage: true }),
+            nullishTitle: z.string().nullish().register(surrealField, { storage: true }),
             metadata: z.object({ nested: z.string() }).register(surrealField, { storage: true })
         }).strict().register(surrealTable, {
             table: 'inferred'
@@ -198,16 +208,62 @@ describe('zod-surreal model compilation', () => {
 
         expect(compileDefineStatements(snapshot)).toEqual([
             'DEFINE TABLE inferred TYPE NORMAL SCHEMAFULL;',
+            'DEFINE FIELD coordinates ON TABLE inferred TYPE array<number>;',
             'DEFINE FIELD count ON TABLE inferred TYPE int;',
+            'DEFINE FIELD createdAt ON TABLE inferred TYPE datetime;',
+            'DEFINE FIELD dueDate ON TABLE inferred TYPE datetime;',
             'DEFINE FIELD enabled ON TABLE inferred TYPE bool;',
+            'DEFINE FIELD labels ON TABLE inferred TYPE array<string>;',
+            'DEFINE FIELD literalStatus ON TABLE inferred TYPE string;',
             'DEFINE FIELD metadata ON TABLE inferred TYPE object;',
             'DEFINE FIELD nullableTitle ON TABLE inferred TYPE option<string>;',
+            'DEFINE FIELD nullishTitle ON TABLE inferred TYPE option<string>;',
+            'DEFINE FIELD optionalElementTags ON TABLE inferred TYPE array<option<string>>;',
+            'DEFINE FIELD optionalTags ON TABLE inferred TYPE option<array<string>>;',
             'DEFINE FIELD optionalTitle ON TABLE inferred TYPE option<string>;',
             'DEFINE FIELD publishedAt ON TABLE inferred TYPE datetime;',
             'DEFINE FIELD score ON TABLE inferred TYPE number;',
             'DEFINE FIELD status ON TABLE inferred TYPE string;',
             'DEFINE FIELD tags ON TABLE inferred TYPE array<string>;',
-            'DEFINE FIELD title ON TABLE inferred TYPE string;'
+            'DEFINE FIELD title ON TABLE inferred TYPE string;',
+            'DEFINE FIELD transformedTitle ON TABLE inferred TYPE string;',
+            'DEFINE FIELD unionMaybeScore ON TABLE inferred TYPE option<int>;'
+        ]);
+    });
+
+    it('renders nested object fields from registered subschema fields', () => {
+        const MessageSchema = z.object({
+            kind: z.string().register(surrealField, { description: 'Message kind.' }),
+            startsTurn: z.boolean().optional().register(surrealField, { optional: true, description: 'Starts a turn.' })
+        }).strict();
+
+        const ExecutionSchema = z.object({
+            journal: z.object({
+                journalId: z.string().register(surrealField, { description: 'Journal id.' }),
+                recordCount: z.number().int().default(0).register(surrealField, { description: 'Record count.' })
+            }).strict().register(surrealField, { description: 'Journal reference.' }),
+            lineage: z.object({
+                retryOfId: z.string().optional().register(surrealField, { optional: true, description: 'Retried execution id.' })
+            }).strict().optional().register(surrealField, { optional: true, description: 'Retry lineage.' }),
+            messages: z.array(MessageSchema).register(surrealField, { description: 'Supported messages.' })
+        }).strict().register(surrealTable, {
+            table: 'execution'
+        });
+
+        const snapshot = compileSchema({
+            models: [defineModel({ name: 'Execution', schema: ExecutionSchema })]
+        });
+
+        expect(compileDefineStatements(snapshot)).toEqual([
+            'DEFINE TABLE execution TYPE NORMAL SCHEMAFULL;',
+            'DEFINE FIELD journal ON TABLE execution TYPE object COMMENT "Journal reference.";',
+            'DEFINE FIELD journal.journalId ON TABLE execution TYPE string COMMENT "Journal id.";',
+            'DEFINE FIELD journal.recordCount ON TABLE execution TYPE int COMMENT "Record count.";',
+            'DEFINE FIELD lineage ON TABLE execution TYPE option<object> COMMENT "Retry lineage.";',
+            'DEFINE FIELD lineage.retryOfId ON TABLE execution TYPE option<string> COMMENT "Retried execution id.";',
+            'DEFINE FIELD messages ON TABLE execution TYPE array<object> COMMENT "Supported messages.";',
+            'DEFINE FIELD messages.*.kind ON TABLE execution TYPE string COMMENT "Message kind.";',
+            'DEFINE FIELD messages.*.startsTurn ON TABLE execution TYPE option<bool> COMMENT "Starts a turn.";'
         ]);
     });
 

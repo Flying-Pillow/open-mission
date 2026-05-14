@@ -15,8 +15,7 @@ import type {
     AgentExecutionObservationAddress,
     AgentExecutionSignalDecision,
     AgentExecutionType
-} from '../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
-import { getAgentExecutionScopeMissionId } from '../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+} from '../entities/AgentExecution/AgentExecutionSchema.js';
 
 export type MissionLoader = (
     input: MissionLocatorType,
@@ -123,9 +122,13 @@ export class MissionRegistry {
     }
 
     public getRuntimeAgentExecutionSnapshot(address: AgentExecutionObservationAddress): AgentExecutionType | undefined {
-        const missionId = getAgentExecutionScopeMissionId(address.scope);
-        const mission = missionId ? this.findLoadedMission(missionId) : undefined;
-        return mission?.getRuntimeAgentExecutionSnapshot(address.agentExecutionId);
+        for (const mission of this.missionHandles.values()) {
+            const snapshot = mission.getRuntimeAgentExecutionSnapshot(address.agentExecutionId);
+            if (snapshot && snapshot.ownerId === address.ownerId) {
+                return snapshot;
+            }
+        }
+        return undefined;
     }
 
     public applyRuntimeAgentExecutionSignalDecision(input: {
@@ -133,13 +136,17 @@ export class MissionRegistry {
         observation: AgentExecutionObservation;
         decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>;
     }): AgentExecutionType | undefined {
-        const missionId = getAgentExecutionScopeMissionId(input.address.scope);
-        const mission = missionId ? this.findLoadedMission(missionId) : undefined;
-        return mission?.applyRuntimeAgentExecutionSignalDecision(
-            input.address.agentExecutionId,
-            input.observation,
-            input.decision
-        );
+        for (const mission of this.missionHandles.values()) {
+            const snapshot = mission.getRuntimeAgentExecutionSnapshot(input.address.agentExecutionId);
+            if (snapshot && snapshot.ownerId === input.address.ownerId) {
+                return mission.applyRuntimeAgentExecutionSignalDecision(
+                    input.address.agentExecutionId,
+                    input.observation,
+                    input.decision
+                );
+            }
+        }
+        return undefined;
     }
 
     public async loadRequiredMission(
@@ -277,15 +284,6 @@ export class MissionRegistry {
                 return typeof value === 'function' ? value.bind(target) : value;
             }
         });
-    }
-
-    private findLoadedMission(missionId: string): MissionHandle | undefined {
-        for (const mission of this.missionHandles.values()) {
-            if (mission.missionId === missionId) {
-                return mission;
-            }
-        }
-        return undefined;
     }
 
 }

@@ -34,8 +34,8 @@ describe('mission template resolution', () => {
             }
         );
 
-        expect(rendered.instruction).toContain('Read .mission/missions/1-initial-setup/BRIEF.md as intake.');
-        expect(rendered.instruction).toContain('Update only .mission/missions/1-initial-setup/01-PRD/PRD.md.');
+        expect(rendered.instruction).toContain('Read .open-mission/missions/1-initial-setup/BRIEF.md as intake.');
+        expect(rendered.instruction).toContain('Update only .open-mission/missions/1-initial-setup/01-PRD/PRD.md.');
     });
 
     it('renders SPEC task instructions with mission dossier artifact paths', async () => {
@@ -52,9 +52,9 @@ describe('mission template resolution', () => {
             }
         );
 
-        expect(rendered.instruction).toContain('Read .mission/missions/1-initial-setup/01-PRD/PRD.md');
-        expect(rendered.instruction).toContain('update only .mission/missions/1-initial-setup/02-SPEC/SPEC.md');
-        expect(rendered.instruction).toContain('Make .mission/missions/1-initial-setup/02-SPEC/SPEC.md ready');
+        expect(rendered.instruction).toContain('Read .open-mission/missions/1-initial-setup/01-PRD/PRD.md');
+        expect(rendered.instruction).toContain('update only .open-mission/missions/1-initial-setup/02-SPEC/SPEC.md');
+        expect(rendered.instruction).toContain('Make .open-mission/missions/1-initial-setup/02-SPEC/SPEC.md ready');
     });
 
     it('renders planning task instructions with mission dossier task paths', async () => {
@@ -71,7 +71,7 @@ describe('mission template resolution', () => {
             }
         );
 
-        expect(rendered.instruction).toContain('Read .mission/missions/1-initial-setup/02-SPEC/SPEC.md');
-        expect(rendered.instruction).toContain('under .mission/missions/1-initial-setup/03-IMPLEMENTATION/tasks');
+        expect(rendered.instruction).toContain('Read .open-mission/missions/1-initial-setup/02-SPEC/SPEC.md');
+        expect(rendered.instruction).toContain('under .open-mission/missions/1-initial-setup/03-IMPLEMENTATION/tasks');
     });
 });
