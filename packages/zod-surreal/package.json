@@ -1,6 +1,6 @@
 {
   "name": "@flying-pillow/zod-surreal",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "description": "Zod-first SurrealDB schema metadata, model compilation, provisioning, typed query support, and hydration primitives.",
   "type": "module",
   "keywords": [

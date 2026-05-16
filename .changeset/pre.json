@@ -11,6 +11,7 @@
   },
   "changesets": [
     "25-generate-a-documentat-added-docs-route-in-web-app-work-mo7pdqxr",
-    "proper-cicd-pipeline"
+    "proper-cicd-pipeline",
+    "zod-surreal-alpha-publish"
   ]
 }

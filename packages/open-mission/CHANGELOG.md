@@ -1,5 +1,13 @@
 # @flying-pillow/open-mission
 
+## 0.1.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @flying-pillow/open-mission-core@0.1.0-alpha.2
+  - @flying-pillow/open-mission-web@0.1.0-alpha.2
+
 ## 0.1.0-alpha.1
 
 ### Patch Changes
