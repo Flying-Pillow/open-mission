@@ -9,6 +9,7 @@ import {
 } from '../Entity/Entity.js';
 import {
     agentExecutionEntityName,
+    agentExecutionJournalEntityName,
     agentExecutionJournalTableName,
     agentExecutionTableName,
     AgentExecutionInputSchema,
@@ -16,6 +17,7 @@ import {
     AgentExecutionJournalRecordStorageSchema,
     AgentExecutionLocatorSchema,
     AgentExecutionSchema,
+    AgentExecutionStorageSchema,
     AgentExecutionSendMessageAcknowledgementSchema,
     AgentExecutionSendMessageInputSchema,
     type AgentExecutionInputType,
@@ -27,6 +29,19 @@ import {
     type AgentExecutionSendMessageInputType,
     type AgentExecutionType
 } from './AgentExecutionSchema.js';
+
+export class AgentExecutionJournalRecord extends Entity<AgentExecutionJournalRecordStorageType, string> {
+    public static override readonly entityName = agentExecutionJournalEntityName;
+    public static readonly storageSchema = AgentExecutionJournalRecordStorageSchema;
+
+    public constructor(data: AgentExecutionJournalRecordStorageType) {
+        super(AgentExecutionJournalRecordStorageSchema.parse(data));
+    }
+
+    public override get id(): string {
+        return this.data.id;
+    }
+}
 
 export type AgentExecutionJournalWriterPlaceholder = {
     appendMessageAccepted?(input: {
@@ -74,12 +89,14 @@ export type AgentExecutionProcessSnapshot = {
 
 export class AgentExecution extends Entity<AgentExecutionType, string> {
     public static override readonly entityName = agentExecutionEntityName;
+    public static readonly storageSchema = AgentExecutionStorageSchema;
     private processHandle: ChildProcessWithoutNullStreams | undefined;
     private processSnapshot: AgentExecutionProcessSnapshot | undefined;
     private processExitPromise: Promise<AgentExecutionProcessSnapshot> | undefined;
 
     public constructor(data: AgentExecutionType) {
-        super(AgentExecutionSchema.parse(data));
+        const canonical = AgentExecutionSchema.parse(data);
+        super(canonical);
     }
 
     public override get id(): string {
@@ -96,6 +113,10 @@ export class AgentExecution extends Entity<AgentExecutionType, string> {
 
     public get ownerId(): string {
         return this.data.ownerId;
+    }
+
+    public toEntity(): AgentExecutionType {
+        return structuredClone(this.data);
     }
 
     public static createEntityId(input: {
@@ -145,9 +166,13 @@ export class AgentExecution extends Entity<AgentExecutionType, string> {
         });
     }
 
+    public static cloneData(input: AgentExecutionType): AgentExecutionType {
+        return structuredClone(input);
+    }
+
     public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<AgentExecution> {
         const locator = AgentExecutionLocatorSchema.parse(payload);
-        const registry = context.agentExecutionRegistry as unknown as AgentExecutionRegistryReader | undefined;
+        const registry = context['agentExecutionRegistry'] as AgentExecutionRegistryReader | undefined;
         if (!registry) {
             throw new Error('AgentExecution resolution requires an AgentExecutionRegistry in the Entity execution context.');
         }
@@ -211,7 +236,7 @@ export class AgentExecution extends Entity<AgentExecutionType, string> {
             stdout: '',
             stderr: ''
         };
-        this.updateRuntimeState({ lifecycle: 'starting', activity: 'executing' });
+        this.updateCanonicalLifecycle({ lifecycle: 'starting', activity: 'executing' });
 
         const child = spawn(command, input.args ?? [], {
             cwd: workingDirectory,
@@ -267,7 +292,7 @@ export class AgentExecution extends Entity<AgentExecutionType, string> {
                     updatedAt: new Date().toISOString(),
                     ...(child.pid !== undefined ? { pid: child.pid } : {})
                 });
-                this.updateRuntimeState({ lifecycle: 'running', activity: 'executing' });
+                this.updateCanonicalLifecycle({ lifecycle: 'running', activity: 'executing' });
                 resolve();
             });
             child.once('error', reject);
@@ -356,7 +381,6 @@ export class AgentExecution extends Entity<AgentExecutionType, string> {
         await context?.agentExecutionJournalWriter?.appendMessageAccepted?.({
             execution: this.toData(),
             message: AgentExecutionSendMessageInputSchema.parse({
-                ...input,
                 message: {
                     ...input.message,
                     messageId
@@ -431,14 +455,14 @@ export class AgentExecution extends Entity<AgentExecutionType, string> {
             ...(input.signal ? { signal: input.signal } : {}),
             ...(input.failureMessage ? { failureMessage: input.failureMessage } : {})
         });
-        this.updateRuntimeState({
+        this.updateCanonicalLifecycle({
             lifecycle: input.status === 'completed' ? 'completed' : input.status === 'terminated' ? 'terminated' : 'failed',
             activity: 'idle'
         });
         return this.getProcessSnapshotOrThrow();
     }
 
-    private updateRuntimeState(input: {
+    private updateCanonicalLifecycle(input: {
         lifecycle: AgentExecutionType['lifecycle'];
         activity: AgentExecutionType['activity'];
     }): void {

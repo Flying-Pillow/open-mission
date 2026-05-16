@@ -1,3 +1,4 @@
+import { field, table } from '@flying-pillow/zod-surreal';
 import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
@@ -85,12 +86,13 @@ export const TaskConfigureCommandOptionsSchema = z.object({
     context: z.array(TaskContextArtifactReferenceSchema).optional()
 }).strict();
 
-export const TaskConfigureInputSchema = TaskLocatorSchema.extend(TaskConfigureCommandOptionsSchema.shape).strict();
-export const TaskStartInputSchema = TaskLocatorSchema.extend(TaskStartCommandOptionsSchema.shape).strict();
-export const TaskCancelInputSchema = TaskLocatorSchema.extend({
+export const TaskInstanceInputSchema = z.object({}).strict();
+export const TaskConfigureInputSchema = TaskConfigureCommandOptionsSchema;
+export const TaskStartInputSchema = TaskStartCommandOptionsSchema;
+export const TaskCancelInputSchema = z.object({
     reason: z.string().trim().min(1).optional()
 }).strict();
-export const TaskReworkInputSchema = TaskLocatorSchema.extend({
+export const TaskReworkInputSchema = z.object({
     input: TaskReworkCommandInputSchema
 }).strict();
 
@@ -124,26 +126,95 @@ export const TaskDossierRecordUpdateSchema = TaskDossierRecordSchema.pick({
 }).partial().strict();
 
 export const TaskStorageSchema = EntityStorageSchema.extend({
+    missionId: z.string().trim().min(1).register(field, {
+        reference: 'Mission',
+        onDelete: 'cascade',
+        index: 'normal',
+        description: 'Owning Mission reference stored in the physical Task record.'
+    }),
     taskId: TaskIdSchema,
-    stageId: z.string().trim().min(1),
-    sequence: z.number().int().positive(),
-    title: z.string().trim().min(1),
-    instruction: z.string(),
-    model: z.string().trim().min(1).optional(),
-    reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
-    taskKind: z.enum(['implementation', 'verification']).optional(),
-    pairedTaskId: z.string().trim().min(1).optional(),
-    lifecycle: z.string().trim().min(1),
-    dependsOn: z.array(z.string().trim().min(1)),
-    context: z.array(TaskContextArtifactReferenceSchema).optional(),
-    waitingOnTaskIds: z.array(z.string().trim().min(1)),
-    agentAdapter: z.string().trim().min(1),
-    autostart: z.boolean().optional(),
-    retries: z.number().int().nonnegative(),
-    fileName: z.string().trim().min(1).optional(),
-    filePath: z.string().trim().min(1).optional(),
-    relativePath: z.string().trim().min(1).optional()
-}).strict();
+    stageId: z.string().trim().min(1).register(field, {
+        reference: 'Stage',
+        onDelete: 'cascade',
+        index: 'normal',
+        description: 'Owning Stage reference stored in the physical Task record.'
+    }),
+    sequence: z.number().int().positive().register(field, {
+        index: 'normal',
+        description: 'Task sequence number stored in the physical Task record.'
+    }),
+    title: z.string().trim().min(1).register(field, {
+        searchable: true,
+        description: 'Task title stored in the physical Task record.'
+    }),
+    instruction: z.string().register(field, {
+        searchable: true,
+        description: 'Task instruction body stored in the physical Task record.'
+    }),
+    model: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Optional model override stored in the physical Task record.'
+    }),
+    reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional().register(field, {
+        optional: true,
+        description: 'Optional reasoning effort stored in the physical Task record.'
+    }),
+    taskKind: z.enum(['implementation', 'verification']).optional().register(field, {
+        optional: true,
+        index: 'normal',
+        description: 'Optional task kind stored in the physical Task record.'
+    }),
+    pairedTaskId: z.string().trim().min(1).optional().register(field, {
+        reference: 'Task',
+        optional: true,
+        description: 'Optional paired Task reference stored in the physical Task record.'
+    }),
+    lifecycle: z.string().trim().min(1).register(field, {
+        index: 'normal',
+        description: 'Task lifecycle state stored in the physical Task record.'
+    }),
+    dependsOn: z.array(z.string().trim().min(1)).register(field, {
+        reference: 'Task',
+        array: true,
+        description: 'Task dependency references stored in the physical Task record.'
+    }),
+    context: z.array(TaskContextArtifactReferenceSchema).optional().register(field, {
+        optional: true,
+        description: 'Optional Task context artifact references stored in the physical Task record.'
+    }),
+    waitingOnTaskIds: z.array(z.string().trim().min(1)).register(field, {
+        reference: 'Task',
+        array: true,
+        description: 'Blocking Task references stored in the physical Task record.'
+    }),
+    agentAdapter: z.string().trim().min(1).register(field, {
+        index: 'normal',
+        description: 'Agent adapter id stored in the physical Task record.'
+    }),
+    autostart: z.boolean().optional().register(field, {
+        optional: true,
+        description: 'Optional autostart flag stored in the physical Task record.'
+    }),
+    retries: z.number().int().nonnegative().register(field, {
+        description: 'Retry count stored in the physical Task record.'
+    }),
+    fileName: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Optional task file name stored in the physical Task record.'
+    }),
+    filePath: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Optional task file path stored in the physical Task record.'
+    }),
+    relativePath: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Optional task relative path stored in the physical Task record.'
+    })
+}).strict().register(table, {
+    table: 'task',
+    schemafull: true,
+    description: 'Mission task physical storage record. SurrealDB record id is the Task identity.'
+});
 
 export const TaskDataSchema = TaskStorageSchema.extend({}).strict();
 
@@ -174,6 +245,7 @@ export type TaskCommandMethodType = z.infer<typeof TaskCommandMethodSchema>;
 export type TaskCommandInputType = z.infer<typeof TaskCommandInputSchema>;
 export type TaskConfigureCommandOptionsType = z.infer<typeof TaskConfigureCommandOptionsSchema>;
 export type TaskStartCommandOptionsType = z.infer<typeof TaskStartCommandOptionsSchema>;
+export type TaskInstanceInputType = z.infer<typeof TaskInstanceInputSchema>;
 export type TaskConfigureInputType = z.infer<typeof TaskConfigureInputSchema>;
 export type TaskStartInputType = z.infer<typeof TaskStartInputSchema>;
 export type TaskCancelInputType = z.infer<typeof TaskCancelInputSchema>;

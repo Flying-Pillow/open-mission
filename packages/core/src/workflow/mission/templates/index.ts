@@ -7,6 +7,7 @@ import { renderMissionTitle } from './common.js';
 import { parseFrontmatterDocument } from '../../../lib/frontmatter.js';
 import { Repository } from '../../../entities/Repository/Repository.js';
 import { DEFAULT_REPOSITORY_AGENT_ADAPTER_ID } from '../../../entities/Repository/RepositorySchema.js';
+import type { MissionTaskAgent } from '../../../entities/Mission/MissionDossierFilesystem.js';
 import { getMissionArtifactDefinition, getMissionStageDefinition, type MissionArtifactKey } from '../../manifest.js';
 import type {
     MissionProductTemplate,
@@ -16,7 +17,7 @@ import type {
     MissionTemplateContext,
     MissionTemplateContextInput
 } from './types.js';
-import type { MissionTaskAgent, MissionTaskStatus } from '../../../entities/Mission/MissionSchema.js';
+import type { MissionTaskStatus } from '../../../entities/Mission/MissionSchema.js';
 import { TaskContextArtifactReferenceSchema } from '../../../entities/Task/TaskSchema.js';
 
 const packagedTemplateDirectory = path.dirname(fileURLToPath(import.meta.url));

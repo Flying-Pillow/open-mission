@@ -15,9 +15,9 @@ import {
 import { StageDataSchema } from '@flying-pillow/open-mission-core/entities/Stage/StageSchema';
 import { TaskDataSchema } from '@flying-pillow/open-mission-core/entities/Task/TaskSchema';
 import type { TaskConfigureCommandOptionsType } from '@flying-pillow/open-mission-core/entities/Task/TaskSchema';
-import { RepositoryDataSchema } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
+import { RepositorySchema } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
 import { AgentExecutionChangedSchema, AgentExecutionDataSchema } from '@flying-pillow/open-mission-core/entities/AgentExecution/AgentExecutionSchema';
-import type { RepositoryPlatformRepositoryType, RepositoryDataType } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryPlatformRepositoryType, RepositoryType } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
 import type { SystemState } from '@flying-pillow/open-mission-core/entities/System/SystemSchema';
 import { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
 import { System } from '$lib/components/entities/System/System.svelte.js';
@@ -311,7 +311,7 @@ export class OpenMissionApplication {
     }
 
     public hydrateRepositoryData(
-        data: RepositoryDataType
+        data: RepositoryType
     ): Repository {
         const id = data.id;
         const existing = this.repositories.get(id);
@@ -346,7 +346,7 @@ export class OpenMissionApplication {
         this.repositoryVersion += 1;
     }
 
-    public reconcileRepositories(repositoryData: RepositoryDataType[]): Repository[] {
+    public reconcileRepositories(repositoryData: RepositoryType[]): Repository[] {
         const nextRepositories = new Map<string, Repository>();
         const repositories = repositoryData.map((data) => {
             const repository = this.hydrateRepositoryData(data);
@@ -370,7 +370,7 @@ export class OpenMissionApplication {
 
     public seedRepositoryFromSummary(summary: SidebarRepositoryData): Repository {
         const { missions, ...repository } = summary;
-        const hydrated = this.hydrateRepositoryData(RepositoryDataSchema.parse(repository));
+        const hydrated = this.hydrateRepositoryData(RepositorySchema.parse(repository));
         hydrated.setMissionCatalog(missions ?? []);
 
         return hydrated;
@@ -1040,17 +1040,13 @@ export class OpenMissionApplication {
     private async loadRepositoryData(input: {
         id: string;
         repositoryRootPath?: string;
-    }): Promise<RepositoryDataType> {
-        return RepositoryDataSchema.parse(
+    }): Promise<RepositoryType> {
+        return RepositorySchema.parse(
             await qry({
                 entity: 'Repository',
                 method: 'read',
-                payload: {
-                    id: input.id,
-                    ...(input.repositoryRootPath
-                        ? { repositoryRootPath: input.repositoryRootPath }
-                        : {})
-                }
+                id: input.id,
+                payload: {}
             }).run()
         );
     }

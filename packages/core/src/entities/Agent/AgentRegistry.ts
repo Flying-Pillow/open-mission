@@ -12,6 +12,7 @@ import {
     type AgentInput,
     type AgentAdapterSettingsResolver
 } from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
+import type { AgentLaunchConfig } from '../AgentExecution/AgentExecutionSchema.js';
 
 export type AgentRegistryOptions = {
     agents: Agent[];
@@ -84,7 +85,7 @@ export class AgentRegistry {
 
 function createProviderSettingsResolver(
     defaults: { settings: RepositorySettingsType }
-): AgentAdapterSettingsResolver<string> {
+): AgentAdapterSettingsResolver<AgentLaunchConfig> {
     return (config, agentId) => {
         const defaultReasoningEffort = readStringMetadata(config, 'reasoningEffort')
             ?? defaults.settings.defaultReasoningEffort?.trim();
@@ -117,7 +118,7 @@ function readAgentDefaultLaunchMode(agentId: string): 'interactive' | 'print' | 
 }
 
 function readStringMetadata(
-    config: Parameters<AgentAdapterSettingsResolver<string>>[0],
+    config: Parameters<AgentAdapterSettingsResolver<AgentLaunchConfig>>[0],
     key: string
 ): string | undefined {
     const value = config.metadata?.[key];
@@ -125,7 +126,7 @@ function readStringMetadata(
 }
 
 function readBooleanMetadata(
-    config: Parameters<AgentAdapterSettingsResolver<string>>[0],
+    config: Parameters<AgentAdapterSettingsResolver<AgentLaunchConfig>>[0],
     key: string
 ): boolean | undefined {
     const value = config.metadata?.[key];
@@ -133,7 +134,7 @@ function readBooleanMetadata(
 }
 
 function readLaunchModeMetadata(
-    config: Parameters<AgentAdapterSettingsResolver<string>>[0]
+    config: Parameters<AgentAdapterSettingsResolver<AgentLaunchConfig>>[0]
 ): 'interactive' | 'print' | undefined {
     const value = config.metadata?.['launchMode'];
     return value === 'interactive' || value === 'print' ? value : undefined;

@@ -8,13 +8,52 @@ import {
     MissionChangedEventSchema,
     MissionCommandIds,
     MissionControlSchema,
+    MissionInstanceInputSchema,
+    MissionReadDocumentInputSchema,
     MissionSchema,
     MissionStorageSchema
 } from './MissionSchema.js';
-import { AgentExecutionSchema } from '../AgentExecution/AgentExecutionSchema.js';
+import { AgentExecutionSchema, type AgentExecutionType } from '../AgentExecution/AgentExecutionSchema.js';
 import { ArtifactDataSchema } from '../Artifact/ArtifactSchema.js';
 import { StageDataSchema } from '../Stage/StageSchema.js';
-import { TaskCommandIds, TaskDataSchema } from '../Task/TaskSchema.js';
+import { TaskDataSchema } from '../Task/TaskSchema.js';
+
+function createTestAgentExecution(input: {
+    id: string;
+    ownerId: string;
+    agentExecutionId: string;
+    agentId: string;
+}): AgentExecutionType {
+    const updatedAt = '2026-05-14T10:00:00.000Z';
+    return AgentExecutionSchema.parse({
+        id: input.id,
+        ownerEntity: 'Task',
+        ownerId: input.ownerId,
+        agentExecutionId: input.agentExecutionId,
+        agentId: input.agentId,
+        lifecycle: 'running',
+        attention: 'autonomous',
+        activity: 'executing',
+        messageRegistry: {
+            messages: []
+        },
+        transportState: {
+            status: 'unavailable',
+            structuredTransport: 'none'
+        },
+        mcpAvailability: 'unavailable',
+        journal: {
+            journalId: `agent_execution_journal:${input.ownerId}/${input.agentExecutionId}`,
+            ownerEntity: 'Task',
+            ownerId: input.ownerId,
+            agentExecutionId: input.agentExecutionId,
+            recordCount: 0,
+            lastSequence: 0
+        },
+        createdAt: updatedAt,
+        updatedAt
+    });
+}
 
 const artifact = ArtifactDataSchema.parse({
     id: 'artifact:mission-1/mission:brief',
@@ -27,6 +66,7 @@ const artifact = ArtifactDataSchema.parse({
 
 const task = TaskDataSchema.parse({
     id: 'task:mission-1/implementation/01',
+    missionId: 'mission-1',
     taskId: 'implementation/01',
     stageId: 'implementation',
     sequence: 1,
@@ -43,6 +83,7 @@ const task = TaskDataSchema.parse({
 
 const stage = StageDataSchema.parse({
     id: 'stage:mission-1/implementation',
+    missionId: 'mission-1',
     stageId: 'implementation',
     lifecycle: 'ready',
     isCurrentStage: true,
@@ -50,76 +91,11 @@ const stage = StageDataSchema.parse({
     tasks: [task]
 });
 
-const agentExecution = AgentExecutionSchema.parse({
+const agentExecution = createTestAgentExecution({
     id: 'agent_execution:mission-1/agent-execution-1',
     ownerId: 'mission-1',
     agentExecutionId: 'agent-execution-1',
-    agentId: 'copilot-cli',
-    process: {
-        agentId: 'copilot-cli',
-        agentExecutionId: 'agent-execution-1',
-        scope: {
-            kind: 'task',
-            missionId: 'mission-1',
-            taskId: 'implementation/01',
-            stageId: 'implementation'
-        },
-        workingDirectory: '/mission',
-        taskId: 'implementation/01',
-        missionId: 'mission-1',
-        stageId: 'implementation',
-        status: 'running',
-        attention: 'autonomous',
-        progress: {
-            state: 'working',
-            updatedAt: '2026-05-02T00:00:00.000Z'
-        },
-        waitingForInput: false,
-        acceptsPrompts: true,
-        acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
-        interactionPosture: 'native-terminal-escape-hatch',
-        interactionCapabilities: {
-            mode: 'pty-terminal',
-            canSendTerminalInput: true,
-            canSendStructuredPrompt: false,
-            canSendStructuredCommand: false
-        },
-        transport: {
-            kind: 'terminal',
-            terminalName: 'mission-agent-execution',
-            terminalPaneId: 'terminal_1'
-        },
-        reference: {
-            agentId: 'copilot-cli',
-            agentExecutionId: 'agent-execution-1',
-            transport: {
-                kind: 'terminal',
-                terminalName: 'mission-agent-execution',
-                terminalPaneId: 'terminal_1'
-            }
-        },
-        startedAt: '2026-05-02T00:00:00.000Z',
-        updatedAt: '2026-05-02T00:00:00.000Z'
-    },
-    transportId: 'terminal',
-    adapterLabel: 'Copilot CLI',
-    lifecycleState: 'running',
-    terminalHandle: {
-        terminalName: 'mission-agent-execution',
-        terminalPaneId: 'terminal_1'
-    },
-    taskId: 'implementation/01',
-    interactionCapabilities: {
-        mode: 'pty-terminal',
-        canSendTerminalInput: true,
-        canSendStructuredPrompt: false,
-        canSendStructuredCommand: false
-    },
-    context: {
-        artifacts: [],
-        instructions: []
-    },
-    supportedMessages: []
+    agentId: 'copilot-cli'
 });
 
 const missionData = {
@@ -142,48 +118,48 @@ const missionData = {
     agentExecutions: [agentExecution]
 };
 
-describe('Mission schemas', () => {
-    it('composes Mission data from the four child Entity schemas', () => {
-        const parsed = MissionStorageSchema.parse(missionData);
+const missionStorageData = {
+    id: 'mission:mission-1',
+    missionId: 'mission-1',
+    title: 'Mission entity strict schema',
+    assignee: {
+        githubLogin: 'octocat',
+        githubUserId: 1,
+        source: 'manual'
+    },
+    type: 'refactor',
+    branchRef: 'mission/mission-1',
+    missionDir: '/mission/.open-mission/missions/mission-1',
+    missionRootDir: '/mission',
+    lifecycle: 'running',
+    currentStageId: 'implementation'
+};
 
+describe('Mission schemas', () => {
+    it('keeps Mission storage lean while MissionSchema is the canonical serializable entity shape', () => {
+        const stored = MissionStorageSchema.parse(missionStorageData);
+        const parsed = MissionSchema.parse({
+            ...missionData,
+            tasks: [task]
+        });
+
+        expect(stored.missionId).toBe('mission-1');
         expect(parsed.artifacts[0]).toEqual(artifact);
         expect(parsed.stages[0]).toEqual(stage);
         expect(parsed.stages[0]?.tasks[0]).toEqual(task);
+        expect(parsed.tasks[0]).toEqual(task);
         expect(parsed.agentExecutions[0]).toEqual(agentExecution);
+        expect(() => MissionStorageSchema.parse(missionData)).toThrow();
+        expect(MissionContract.dataSchema).toBe(MissionSchema);
     });
 
     it('rejects stale child AgentExecution runtime terminal fields', () => {
-        expect(() => MissionStorageSchema.parse({
+        expect(() => MissionSchema.parse({
             ...missionData,
+            tasks: [task],
             agentExecutions: [{
                 ...agentExecution,
                 terminalName: 'mission-agent-execution'
-            }]
-        })).toThrow();
-    });
-
-    it('rejects command descriptors embedded in Entity data', () => {
-        expect(() => MissionStorageSchema.parse({
-            ...missionData,
-            commands: [{ commandId: MissionCommandIds.pause, entity: 'Mission', method: 'pause', label: 'Pause Mission', available: true }]
-        })).toThrow();
-
-        expect(() => MissionStorageSchema.parse({
-            ...missionData,
-            stages: [{
-                ...stage,
-                commands: [{ commandId: 'stage.generateTasks', entity: 'Stage', method: 'generateTasks', label: 'Generate Tasks', available: true }]
-            }]
-        })).toThrow();
-
-        expect(() => MissionStorageSchema.parse({
-            ...missionData,
-            stages: [{
-                ...stage,
-                tasks: [{
-                    ...task,
-                    commands: [{ commandId: TaskCommandIds.start, entity: 'Task', method: 'start', label: 'Start Task', available: true }]
-                }]
             }]
         })).toThrow();
     });
@@ -234,7 +210,7 @@ describe('Mission schemas', () => {
                 commandId: MissionCommandIds.pause,
                 entity: 'Mission',
                 method: 'pause',
-                targetId: 'mission:mission-1',
+                id: 'mission:mission-1',
                 label: 'Pause Mission',
                 available: true
             }],
@@ -242,6 +218,8 @@ describe('Mission schemas', () => {
         });
 
         expect(MissionContract.methods?.['read']?.result).toBe(MissionSchema);
+        expect(MissionContract.methods?.['read']?.payload).toBe(MissionInstanceInputSchema);
+    expect(MissionContract.dataSchema).toBe(MissionSchema);
         expect(MissionContract.methods?.['readControl']?.result).toBe(MissionControlSchema);
         expect(MissionContract.events?.['changed']?.payload).toBe(MissionChangedEventSchema);
         expect(data.id).toBe('mission:mission-1');
@@ -283,6 +261,13 @@ describe('Mission schemas', () => {
             commands: [{ label: 'Pause Mission', available: true }],
             tasks: [task]
         })).toThrow();
+    });
+
+    it('uses lean Mission instance payload schemas', () => {
+        expect(MissionInstanceInputSchema.parse({})).toEqual({});
+        expect(MissionReadDocumentInputSchema.parse({ path: 'BRIEF.md' })).toEqual({ path: 'BRIEF.md' });
+        expect(() => MissionInstanceInputSchema.parse({ missionId: 'mission-1' })).toThrow();
+        expect(() => MissionReadDocumentInputSchema.parse({ missionId: 'mission-1', path: 'BRIEF.md' })).toThrow();
     });
 
     it('excludes terminal snapshot channels from runtime event subscriptions', () => {

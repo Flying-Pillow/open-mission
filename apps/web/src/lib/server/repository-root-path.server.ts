@@ -1,4 +1,4 @@
-import { RepositoryDataSchema } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
+import { RepositorySchema } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
 import { EntityProxy } from '$lib/server/daemon/entity-proxy';
 
 export async function resolveRepositoryRootPath(input: {
@@ -17,10 +17,11 @@ export async function resolveRepositoryRootPath(input: {
     }
 
     try {
-        const repository = RepositoryDataSchema.parse(await new EntityProxy(input.locals).executeEntityQuery({
+        const repository = RepositorySchema.parse(await new EntityProxy(input.locals).executeEntityQuery({
             entity: 'Repository',
             method: 'read',
-            payload: { id: repositoryId }
+            id: repositoryId,
+            payload: {}
         }));
         return repository.repositoryRootPath;
     } catch (error) {

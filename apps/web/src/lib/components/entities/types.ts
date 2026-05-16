@@ -1,14 +1,14 @@
 import type {
     RepositoryIssueDetailType,
     RepositoryPlatformRepositoryType,
-    RepositoryDataType,
+    RepositoryType,
     TrackedIssueSummaryType
 } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
 import type { MissionCatalogEntryType } from '@flying-pillow/open-mission-core/entities/Mission/MissionSchema';
 import type { AgentExecutionDataType } from '@flying-pillow/open-mission-core/entities/AgentExecution/AgentExecutionSchema';
 import type { MissionType } from '@flying-pillow/open-mission-core/entities/Mission/MissionSchema';
 
-export type SidebarRepositoryData = RepositoryDataType & {
+export type SidebarRepositoryData = RepositoryType & {
     missions?: MissionCatalogEntryType[];
 };
 export type AppRepositoryListItem = {
@@ -26,7 +26,7 @@ export type {
     RepositoryIssueDetailType,
     MissionCatalogEntryType,
     RepositoryPlatformRepositoryType,
-    RepositoryDataType,
+    RepositoryType,
     TrackedIssueSummaryType,
     AgentExecutionDataType,
     MissionType

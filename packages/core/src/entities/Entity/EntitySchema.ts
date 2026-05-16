@@ -28,6 +28,71 @@ export const EntityIdSchema = nonEmptyStringSchema.refine((value) => {
 export const EntityStorageSchema = z.object({
     id: EntityIdSchema
 }).strict();
+
+export const WhereSchema = z.object({
+    operator_before: z.enum(['AND', 'OR', 'NOT', 'AND NOT', '(']).optional().nullable(),
+    field: z.string().trim().min(1),
+    operator: z.enum([
+        '=',
+        '!=',
+        '==',
+        '?=',
+        '*=',
+        '<',
+        '>',
+        '>=',
+        '<=',
+        'IS',
+        'IS NOT',
+        'CONTAINS',
+        'CONTAINSNOT',
+        'CONTAINSALL',
+        'CONTAINSNONE',
+        'INSIDE',
+        'OUTSIDE'
+    ]).optional().nullable(),
+    value: z.union([z.string(), z.number(), z.boolean(), z.null(), z.date()]).optional().nullable(),
+    operator_after: z.enum([')']).optional().nullable()
+}).strict();
+
+export const OrderBySchema = z.object({
+    field: z.string().trim().min(1),
+    direction: z.enum(['ASC', 'DESC']).optional().nullable()
+}).strict();
+
+export const GroupBySchema = z.object({
+    field: z.string().trim().min(1)
+}).strict();
+
+export const SelectSchema = z.object({
+    select: z.string().trim().min(1).optional().nullable(),
+    from: z.string().trim().min(1).optional().nullable(),
+    where: z.union([
+        z.string().trim().min(1),
+        WhereSchema,
+        z.array(z.union([z.string().trim().min(1), WhereSchema]))
+    ]).optional().nullable(),
+    omit: z.union([z.string().trim().min(1), z.array(z.string().trim().min(1))]).optional().nullable(),
+    fetch: z.union([z.string().trim().min(1), z.array(z.string().trim().min(1))]).optional().nullable(),
+    orderBy: z.union([OrderBySchema, z.array(OrderBySchema)]).optional().nullable(),
+    groupBy: z.union([GroupBySchema, z.array(GroupBySchema)]).optional().nullable(),
+    group: z.string().trim().min(1).optional().nullable(),
+    start: z.number().int().min(0).optional().nullable(),
+    limit: z.number().int().positive().optional().nullable(),
+    pagination: z.boolean().optional().nullable()
+}).strict();
+
+export const BaseFindResultSchema = z.object({
+    count: z.number().int().min(0),
+    start: z.number().int().min(0),
+    total: z.number().int().min(0)
+}).strict();
+
+export function createFindResultSchema<TItem extends z.ZodType>(itemSchema: TItem) {
+    return BaseFindResultSchema.extend({
+        entities: z.array(itemSchema)
+    });
+}
 export const EntityChannelSchema = nonEmptyStringSchema.refine((value) => {
     const tableSeparatorIndex = value.indexOf(':');
     const eventSeparatorIndex = value.lastIndexOf('.');
@@ -120,7 +185,7 @@ export const EntityCommandDescriptorSchema = z.object({
     commandId: z.string().trim().min(1),
     entity: EntityNameSchema,
     method: EntityMethodNameSchema,
-    targetId: EntityIdSchema.optional(),
+    id: EntityIdSchema.optional(),
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
     available: z.boolean(),
@@ -210,6 +275,10 @@ export const EntityEventEnvelopeSchema = z.object({
 export type EntityIdType = z.infer<typeof EntityIdSchema>;
 export type IdType = z.infer<typeof IdSchema>;
 export type EntityStorageType = z.infer<typeof EntityStorageSchema>;
+export type WhereType = z.infer<typeof WhereSchema>;
+export type OrderByType = z.infer<typeof OrderBySchema>;
+export type GroupByType = z.infer<typeof GroupBySchema>;
+export type SelectType = z.infer<typeof SelectSchema>;
 export type EntityType = z.infer<typeof EntitySchema>;
 export type EntityChannelType = z.infer<typeof EntityChannelSchema>;
 export type EntityEventAddressType = z.infer<typeof EntityEventAddressSchema>;
@@ -230,3 +299,7 @@ export type EntityMethodType = z.infer<typeof EntityMethodSchema>;
 export type EntityContractType = z.infer<typeof EntityContractSchema>;
 export type EntityCommandAcknowledgementType = z.infer<typeof EntityCommandAcknowledgementSchema>;
 export type EntityEventEnvelopeType = z.infer<typeof EntityEventEnvelopeSchema>;
+export type BaseFindResultType = z.infer<typeof BaseFindResultSchema>;
+export type FindResultType<TEntity = unknown> = BaseFindResultType & {
+    entities: TEntity[];
+};

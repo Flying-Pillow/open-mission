@@ -3,11 +3,12 @@ import { Agent } from './Agent.js';
 import { AgentSchema } from './AgentSchema.js';
 import { AgentRegistry } from './AgentRegistry.js';
 import { AgentAdapter } from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
+import { Repository } from '../Repository/Repository.js';
 
 describe('Agent', () => {
-    it('projects an Agent as the canonical hydrated Entity schema', async () => {
+    it('hydrates an Agent as the canonical Entity schema', async () => {
         const adapter = new AgentAdapter({
-            id: 'projection-agent',
+            id: 'catalog-agent',
             command: process.execPath,
             displayName: 'Timeline Agent',
             createLaunchPlan: () => ({
@@ -24,8 +25,8 @@ describe('Agent', () => {
             ...data,
             commands: []
         })).toMatchObject({
-            id: 'agent:projection-agent',
-            agentId: 'projection-agent',
+            id: 'agent:catalog-agent',
+            agentId: 'catalog-agent',
             displayName: 'Timeline Agent',
             diagnostics: {
                 command: process.execPath,
@@ -49,15 +50,29 @@ describe('Agent', () => {
         });
         const agent = await Agent.fromAdapter(adapter);
         vi.spyOn(AgentRegistry, 'createConfigured').mockResolvedValue(new AgentRegistry({ agents: [agent] }));
+        vi.spyOn(Repository, 'resolve').mockResolvedValue({
+            repositoryRootPath: process.cwd()
+        } as Repository);
+        const agentConnectionTester = {
+            test: vi.fn(async ({ agent: testedAgent }: { agent: Agent }) => ({
+                ok: true,
+                kind: 'success',
+                agentId: testedAgent.agentId,
+                agentName: testedAgent.displayName,
+                summary: `${testedAgent.displayName} is available.`
+            }))
+        };
 
         const result = await Agent.testConnection({
             agentId: 'command-agent',
-            repositoryRootPath: process.cwd(),
+            repositoryId: 'repository:local/test',
             workingDirectory: process.cwd()
         }, {
-            surfacePath: process.cwd()
+            surfacePath: process.cwd(),
+            agentConnectionTester
         });
 
+        expect(agentConnectionTester.test).toHaveBeenCalledOnce();
         expect(result).toMatchObject({
             ok: true,
             kind: 'success',

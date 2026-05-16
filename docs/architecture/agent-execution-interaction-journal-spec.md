@@ -8,7 +8,7 @@ description: Implementation spec for the canonical semantic AgentExecution inter
 
 ## Scope
 
-> Current authority: this implementation spec contains pre-convergence journal and AgentExecutor wording. Where it conflicts with `CONTEXT.md`, ADR-0006.01, ADR-0006.05, or ADR-0006.08 as updated on 2026-05-13, follow the newer rule: `AgentExecution` is the canonical in-memory Entity instance and process owner; AgentExecution logs are owned audit/recovery material, not a separate domain owner; `AgentExecutor` is legacy vocabulary or a private collaborator only.
+> Current authority: `AgentExecution` is the canonical in-memory Entity instance and process owner. AgentExecution logs are owned audit/recovery material. `AgentExecutionRegistry` is active lookup and process-handle plumbing.
 
 This spec implements the requirements in [Agent Execution Interaction Journal PRD](agent-execution-interaction-journal-prd.md) and the decision in ADR-0006.08.
 
@@ -20,7 +20,7 @@ The implementation creates one durable semantic interaction path for AgentExecut
 - ADR-0006.03: runtime-defined AgentExecution messages.
 - ADR-0006.07: AgentExecution logs as daemon audit material.
 - ADR-0006.04: prompt-scoped Agent execution signals.
-- ADR-0006.01: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
+- ADR-0006.01: Agent, AgentAdapter, AgentExecution, AgentExecutionRegistry, and Terminal vocabulary.
 - ADR-0006.05: AgentExecution structured interaction vocabulary.
 - ADR-0006.06: Mission MCP server Agent signal transport.
 - ADR-0006.08: AgentExecution interaction journal persistence.
@@ -37,17 +37,19 @@ AgentExecution owns:
 - idempotency for message ids and observation ids.
 - projection from journal records into chat/timeline data.
 - lifecycle, attention, semantic activity, and input-request state.
-- journaled runtime activity and telemetry records when runtime facts are promoted from live overlay into durable audit material.
+- journaled process activity and telemetry records when live process observations are accepted into durable audit material.
 - the storage contract for append/read/replay semantics, independent of owning Entity scope.
 
-### AgentExecutor
+### AgentExecution Process And Observation Path
 
-AgentExecutor owns:
+AgentExecution owns:
 
-- writing runtime-observed records through AgentExecution, not directly to the filesystem.
-- routing stdout markers, MCP tool calls, provider output, terminal heuristics, and daemon runtime facts into observations.
-- delivering AgentExecutionMessages to the selected AgentAdapter or terminal controller.
+- writing process-observed records through its journal path, not directly to ad hoc filesystem locations.
+- routing stdout markers, MCP tool calls, provider output, terminal heuristics, and daemon-observed semantic operation records into observations.
+- delivering AgentExecutionMessages to the selected AgentAdapter or terminal transport.
 - recording delivery attempts and failures.
+
+AgentExecutionRegistry resolves active AgentExecution instances and live process handles. Journal writes, delivery policy, and runtime state shape stay inside AgentExecution.
 
 ### Mission Workflow Runtime
 
@@ -61,7 +63,7 @@ Mission workflow runtime does not own message transcripts, chat projection, obse
 
 ### AgentExecution Journal Store
 
-The AgentExecution journal store is owner-independent. Its behavior must not fork by owning Entity type. System, Repository, Mission, Task, and Artifact ownership may cause a storage adapter to choose a different filesystem path or database key, but every owner uses the same journal record schemas, append semantics, read semantics, replay semantics, and idempotency rules.
+The AgentExecution journal store is owner-independent. System, Repository, Mission, Task, and Artifact ownership may cause a storage adapter to choose a different filesystem path or database key, but every owner uses the same journal record schemas, append semantics, read semantics, replay semantics, and idempotency rules.
 
 The storage contract is shaped around an AgentExecution journal reference rather than a filesystem backend location:
 
@@ -82,32 +84,32 @@ type AgentExecutionJournalStore = {
 };
 ```
 
-Storage adapters may inspect the journal reference and runtime context to choose where bytes live. They must not change the journal shape or implement alternate append/read/replay behavior by owner type.
+Storage adapters may inspect the journal reference and runtime context to choose where bytes live. The journal shape and append/read/replay behavior remain shared across owner types.
 
 Phase-one file-backed path policy is explicit:
 
 - System-owned journals live under the configured System config/state folder.
-- Repository-owned journals live under the main Repository `.mission` control state.
-- Mission-owned journals live under `.mission/missions/<missionId>`.
+- Repository-owned journals live under the main Repository `.open-mission` control state.
+- Mission-owned journals live under `.open-mission/missions/<missionId>`.
 - Task-owned journals live under the owning Mission dossier.
 - Artifact-owned journals are deferred until Artifact-scoped AgentExecution persistence is implemented.
 
-If durable storage cannot be resolved, launch must fail before the journal header is written. Phase one must not silently fall back to an in-memory journal for new AgentExecutions.
+If durable storage cannot be resolved, launch fails before the journal header is written. Phase one starts new AgentExecutions only after durable journal storage is available.
 
 ### Terminal
 
 Terminal and TerminalRegistry own raw PTY input, output, resize, screen, exit, and terminal recording updates.
 
-### Live Runtime Snapshot
+### Live Process State
 
 Replay reconstructs semantic AgentExecution truth. It does not reconstruct every live process detail.
 
-AgentExecutor and Terminal may expose a live runtime snapshot for active executions. The runtime snapshot is an overlay used for current UI and runtime control; it is not the durable semantic source of truth.
+AgentExecution and Terminal may expose live process state for active executions. That state is used for current UI and process control; it is not the durable semantic source of truth.
 
 Suggested shape:
 
 ```ts
-type AgentExecutionRuntimeSnapshot = {
+type AgentExecutionProcessState = {
   agentExecutionId: string;
   capturedAt: string;
   attachedTerminalAgentExecutionId?: string;
@@ -135,7 +137,7 @@ type AgentExecutionRuntimeSnapshot = {
 };
 ```
 
-If live runtime facts should survive restart, explain durable audit, or affect deterministic replay, they must be promoted into journal records. Otherwise they remain runtime overlay data.
+If live process observations should survive restart, explain durable audit, or affect deterministic replay, they must be accepted into journal records. Otherwise they remain live process data.
 
 ## Storage Layout
 
@@ -160,7 +162,7 @@ The Agent journal path pattern is:
 agent-journals/<agentExecutionId>.interaction.jsonl
 ```
 
-Those Mission helpers must not become a separate Mission-specific journal storage engine. `ensure`, `append`, and `read` belong to the shared AgentExecution journal store after the file-backed store has resolved a path for the journal reference.
+Those Mission helpers are path helpers only. `ensure`, `append`, and `read` belong to the shared AgentExecution journal store after the file-backed store has resolved a path for the journal reference.
 
 Repository and System file-backed relative paths should use the same filename convention:
 
@@ -168,7 +170,7 @@ Repository and System file-backed relative paths should use the same filename co
 agent-journals/<encoded-agent-execution-id>.interaction.jsonl
 ```
 
-The root path differs by owner context; the relative interaction journal filename pattern does not. This path policy is not AgentExecution journal identity and must not block a future database-backed store from writing all journal records to one table.
+The root path differs by owner context; the relative interaction journal filename pattern stays the same. This path policy is separate from AgentExecution journal identity, leaving room for a future database-backed store to write all journal records to one table.
 
 ## Schema Model
 
@@ -192,7 +194,7 @@ The journal record registry is the canonical list of appendable journal record k
 | `owner-effect.recorded` | records accepted owner-facing effects | AgentExecution journal record registry |
 | `projection.recorded` | reserves durable projection materialization for later phases | AgentExecution journal record registry |
 
-The journal record registry stays explicit even when some record payloads derive from narrower registries. Do not force headers, decisions, state changes, or owner effects through a signal-shaped registry.
+The journal record registry stays explicit even when some record payloads derive from narrower registries. Headers, decisions, state changes, and owner effects keep their own record shapes rather than passing through a signal-shaped registry.
 
 ### Signal Registry
 
@@ -258,7 +260,7 @@ type AgentExecutionJournalHeaderRecord = AgentExecutionJournalRecordBase & {
 };
 ```
 
-Header creation is mandatory before the Agent runtime receives the initial prompt or launch instructions. AgentExecutor resolves durable journal storage for the journal reference, ensures the journal, appends `journal.header`, and only then starts delivery to the runtime. If header append fails, launch fails and no Agent runtime should be started.
+Header creation is mandatory before the Agent process receives the initial prompt or launch instructions. AgentExecution launch resolves durable journal storage for the journal reference, ensures the journal, appends `journal.header`, and only then starts delivery to the process. If header append fails, launch fails and no Agent process should be started.
 
 ### Message Records
 
@@ -285,7 +287,7 @@ Phase-one message mapping is fixed:
 | `submitCommand` runtime command | `message.accepted` | `operator` or `daemon` from caller context | yes |
 | raw terminal input | none | n/a | no |
 
-Raw terminal input remains Terminal transport input. It can be recorded in terminal recordings, but it must not be treated as an AgentExecutionMessage unless it entered through an AgentExecution message descriptor.
+Raw terminal input remains Terminal transport input. It can be recorded in terminal recordings, and it becomes an AgentExecutionMessage only when it enters through an AgentExecution message descriptor.
 
 Delivery is a separate best-effort record:
 
@@ -343,7 +345,7 @@ Phase one maps existing `AgentExecutionObservationPolicy` decisions to journal d
 | `emit-message` | `emit-message` |
 | `update-execution` | `update-state` |
 
-`route-owner-effect` is reserved for the first owner effect that actually emits an Entity event or Mission workflow event from an accepted observation. Do not emit placeholder owner-effect records before there is a concrete owner effect.
+`route-owner-effect` is reserved for the first owner effect that actually emits an Entity event or Mission workflow event from an accepted observation. Owner-effect records appear only when there is a concrete owner effect.
 
 ### State Records
 
@@ -359,7 +361,7 @@ type AgentExecutionStateChangedRecord = AgentExecutionJournalRecordBase & {
 };
 ```
 
-Do not put noisy progress percentages, token counts, streaming summaries, active file paths, or transient tool metadata inside `state.changed`. Those facts are runtime activity and telemetry, not semantic state transitions.
+Noisy progress percentages, token counts, streaming summaries, active file paths, and transient tool metadata belong in runtime activity and telemetry records rather than `state.changed` semantic transitions.
 
 `awaiting-input` is not a valid lifecycle state. Input requests are represented as `lifecycle: running` plus `attention: awaiting-operator` and `currentInputRequestId`.
 
@@ -447,11 +449,11 @@ Replay output:
 - latest retained runtime activity and telemetry snapshot when present.
 - projected timeline items.
 
-Replay must be deterministic for the same ordered records. Invalid records fail clean-slate validation; do not add fallback parsing or compatibility aliases without a Mission runtime migration ADR.
+Replay is deterministic for the same ordered records. Invalid records fail clean-slate validation; fallback parsing or compatibility aliases require a Mission runtime migration ADR.
 
 Replay should route observation signal projection through the signal registry so descriptor metadata, journal signal variants, and timeline projection behavior stay aligned.
 
-Live runtime snapshots are composed after replay for active read models. They must not change replay output, idempotency hydration, or semantic state reconstruction.
+Live runtime snapshots are composed after replay for active read models. Replay output, idempotency hydration, and semantic state reconstruction remain journal-derived.
 
 ## Write Path
 
@@ -530,7 +532,7 @@ Repository and System journal roots are file-store path policy, not Mission runt
 - Filesystem tests for shared journal store append/read behavior and Mission-backed location validation.
 - Replay tests that reconstruct state from journal records.
 - Replay tests proving semantic state reconstruction does not depend on retaining every `activity.updated` record.
-- Replay tests proving live runtime snapshots do not affect deterministic replay output.
+- Replay tests proving deterministic replay output stays independent of live runtime snapshots.
 - Policy tests proving progress, token usage, streaming summaries, and transient targets append `activity.updated` rather than `state.changed`.
 - Duplicate observation replay tests across fresh `AgentExecutionObservationPolicy` instances.
 - `needs_input` tests proving request and response are separate records.

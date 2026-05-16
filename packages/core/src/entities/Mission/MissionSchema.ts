@@ -1,22 +1,16 @@
+import { field, table } from '@flying-pillow/zod-surreal';
 import { z } from 'zod/v4';
+import { type AgentExecutionLaunchModeType } from '../AgentExecution/AgentExecutionSchema.js';
 import {
-    type AgentExecutionLaunchModeType,
-    AgentExecutionReasoningEffortSchema
-} from '../AgentExecution/AgentExecutionCommunicationSchema.js';
-import {
-    WorkflowConfigurationSnapshotSchema,
     WorkflowGateTimelineSchema,
     WorkflowPauseStateSchema,
     WorkflowStageRuntimeTimelineSchema,
     WorkflowTaskRuntimeStateSchema,
     type WorkflowTaskLifecycleState
 } from '../../workflow/engine/types.js';
-import { MISSION_LIFECYCLE_STATES } from '../../workflow/engine/constants.js';
 import { type MissionArtifactKey } from '../../workflow/mission/manifest.js';
-import { MISSION_STAGE_IDS, type MissionStageId } from '../../workflow/stages.js';
 import {
     EntityCommandAcknowledgementSchema,
-    EntityCommandDescriptorSchema,
     EntitySchema,
     EntityStorageSchema,
     EntityEventEnvelopeSchema
@@ -26,9 +20,7 @@ import {
     AgentExecutionTerminalSchema,
     AgentExecutionSchema,
     AgentExecutionChangedSchema,
-    AgentExecutionLifecycleStateSchema,
-    type AgentExecutionPermissionRequestType,
-    type AgentExecutionTelemetryType
+    AgentExecutionLifecycleStateSchema
 } from '../AgentExecution/AgentExecutionSchema.js';
 import {
     ArtifactEventLocatorSchema,
@@ -36,17 +28,14 @@ import {
     ArtifactDataChangedSchema
 } from '../Artifact/ArtifactSchema.js';
 import {
-    StageDataSchema,
     StageSchema,
     StageEventSubjectSchema,
-    StageDataChangedSchema,
-    StageStatusViewSchema
+    StageDataChangedSchema
 } from '../Stage/StageSchema.js';
 import {
     TaskSchema,
     TaskEventSubjectSchema,
-    TaskDataChangedSchema,
-    TaskDossierRecordSchema
+    TaskDataChangedSchema
 } from '../Task/TaskSchema.js';
 import { MissionTerminalSnapshotSchema } from '../Terminal/MissionTerminalSchema.js';
 export const missionEntityName = 'Mission' as const;
@@ -124,6 +113,14 @@ export type MissionDescriptor = {
     deliveredAt?: string;
 };
 
+type MissionWorktreeNodeData = {
+    name: string;
+    relativePath: string;
+    absolutePath: string;
+    kind: 'file' | 'directory';
+    children?: MissionWorktreeNodeData[] | undefined;
+};
+
 export const MissionEventSubjectSchema = MissionLocatorSchema.extend({
     entity: z.literal(missionEntityName)
 }).strict();
@@ -140,6 +137,8 @@ export const MissionCatalogEntrySchema = z.object({
     repositoryRootPath: z.string().trim().min(1).optional(),
     issueId: z.number().int().positive().optional()
 }).strict();
+
+export const MissionInstanceInputSchema = z.object({}).strict();
 
 export const MissionSelectionCandidateSchema = MissionCatalogEntrySchema.extend({
     assignee: MissionAssigneeSchema.optional()
@@ -186,22 +185,61 @@ export const MissionDocumentSchema = z.object({
 
 export const MissionStorageSchema = EntityStorageSchema.extend({
     missionId: z.string().trim().min(1),
-    title: z.string().trim().min(1),
-    issueId: z.number().int().positive().optional(),
-    assignee: MissionAssigneeSchema.optional(),
-    type: MissionTypeSchema,
-    operationalMode: z.string().trim().min(1).optional(),
-    branchRef: z.string().trim().min(1),
-    missionDir: z.string().trim().min(1),
-    missionRootDir: z.string().trim().min(1),
-    lifecycle: z.string().trim().min(1).optional(),
-    updatedAt: z.string().trim().min(1).optional(),
-    currentStageId: z.string().trim().min(1).optional(),
-    artifacts: z.array(ArtifactDataSchema),
-    stages: z.array(StageDataSchema),
-    agentExecutions: z.array(AgentExecutionSchema),
-    recommendedAction: z.string().trim().min(1).optional()
-}).strict();
+    title: z.string().trim().min(1).register(field, {
+        searchable: true,
+        description: 'Mission title stored in the physical Mission record.'
+    }),
+    issueId: z.number().int().positive().optional().register(field, {
+        optional: true,
+        index: 'normal',
+        description: 'Optional hosted issue number associated with the Mission.'
+    }),
+    assignee: MissionAssigneeSchema.optional().register(field, {
+        optional: true,
+        description: 'Optional Mission assignee stored in the physical Mission record.'
+    }),
+    type: MissionTypeSchema.register(field, {
+        index: 'normal',
+        description: 'Mission type stored in the physical Mission record.'
+    }),
+    operationalMode: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Optional Mission operational mode stored in the physical Mission record.'
+    }),
+    branchRef: z.string().trim().min(1).register(field, {
+        index: 'unique',
+        description: 'Mission branch ref stored in the physical Mission record.'
+    }),
+    missionDir: z.string().trim().min(1).register(field, {
+        description: 'Tracked Mission directory path stored in the physical Mission record.'
+    }),
+    missionRootDir: z.string().trim().min(1).register(field, {
+        description: 'Mission worktree root directory stored in the physical Mission record.'
+    }),
+    lifecycle: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        index: 'normal',
+        description: 'Optional Mission lifecycle state stored in the physical Mission record.'
+    }),
+    updatedAt: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Optional last-update timestamp stored in the physical Mission record.'
+    }),
+    currentStageId: z.string().trim().min(1).optional().register(field, {
+        reference: 'Stage',
+        optional: true,
+        index: 'normal',
+        description: 'Optional current Stage reference stored in the physical Mission record.'
+    }),
+    recommendedAction: z.string().trim().min(1).optional().register(field, {
+        optional: true,
+        description: 'Optional recommended operator action stored in the physical Mission record.'
+    })
+}).strict().register(table, {
+    table: 'mission',
+    schemafull: true,
+    description: 'Mission physical storage record. SurrealDB record id is the Mission identity.'
+});
 
 export const MissionWorkflowStateSchema = MissionStorageSchema.pick({
     lifecycle: true,
@@ -214,13 +252,13 @@ export const MissionWorkflowStateSchema = MissionStorageSchema.pick({
     gates: z.array(WorkflowGateTimelineSchema).optional()
 }).strict();
 
-export const MissionWorktreeNodeSchema: z.ZodType<MissionWorktreeNodeData> = z.object({
+export const MissionWorktreeNodeSchema: z.ZodType<MissionWorktreeNodeData> = z.lazy(() => z.object({
     name: z.string().trim().min(1),
     relativePath: z.string(),
     absolutePath: z.string().trim().min(1),
     kind: z.enum(['file', 'directory']),
-    children: z.array(z.lazy(() => MissionWorktreeNodeSchema)).optional()
-}).strict();
+    children: z.array(MissionWorktreeNodeSchema).optional()
+}).strict());
 
 export const MissionWorktreeSchema = z.object({
     rootPath: z.string().trim().min(1),
@@ -228,14 +266,13 @@ export const MissionWorktreeSchema = z.object({
     tree: z.array(MissionWorktreeNodeSchema)
 }).strict();
 
-const MissionStoragePayloadSchema = MissionStorageSchema.omit({ id: true });
-
 export const MissionSchema = EntitySchema.extend({
-    ...MissionStoragePayloadSchema.shape,
-    workflow: MissionWorkflowStateSchema.optional(),
-    commands: z.array(EntityCommandDescriptorSchema).optional(),
+    ...MissionStorageSchema.shape,
+    artifacts: z.array(ArtifactDataSchema),
     stages: z.array(StageSchema),
     tasks: z.array(TaskSchema),
+    agentExecutions: z.array(AgentExecutionSchema),
+    workflow: MissionWorkflowStateSchema.optional(),
 }).strict();
 
 export const MissionControlSchema = z.object({
@@ -298,11 +335,11 @@ export const MissionRuntimeEventEnvelopeSchema = z.discriminatedUnion('type', [
     })
 ]);
 
-export const MissionReadDocumentInputSchema = MissionLocatorSchema.extend({
+export const MissionReadDocumentInputSchema = z.object({
     path: z.string().trim().min(1)
 }).strict();
 
-export const MissionWriteDocumentInputSchema = MissionLocatorSchema.extend({
+export const MissionWriteDocumentInputSchema = z.object({
     path: z.string().trim().min(1),
     content: z.string()
 }).strict();
@@ -334,6 +371,7 @@ export type MissionCatalogEntryType = z.infer<typeof MissionCatalogEntrySchema>;
 export type MissionSelectionCandidateType = z.infer<typeof MissionSelectionCandidateSchema>;
 export type MissionPreparationStatusType = z.infer<typeof MissionPreparationStatusSchema>;
 export type MissionAssignee = z.infer<typeof MissionAssigneeSchema>;
+export type MissionInstanceInputType = z.infer<typeof MissionInstanceInputSchema>;
 export type MissionReadDocumentInputType = z.infer<typeof MissionReadDocumentInputSchema>;
 export type MissionWriteDocumentInputType = z.infer<typeof MissionWriteDocumentInputSchema>;
 export type MissionType = z.infer<typeof MissionSchema>;

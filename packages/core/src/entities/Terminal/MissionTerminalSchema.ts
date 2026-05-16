@@ -19,9 +19,7 @@ export const MissionTerminalInputSchema = z.object({
     message: 'Mission terminal input requires data or a complete cols/rows resize payload.'
 });
 
-export const MissionSendTerminalInputSchema = MissionTerminalLocatorSchema.extend({
-    ...MissionTerminalInputSchema.shape
-}).strict();
+export const MissionSendTerminalInputSchema = MissionTerminalInputSchema;
 
 export const MissionTerminalSnapshotSchema = z.object({
     missionId: z.string().trim().min(1),

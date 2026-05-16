@@ -41,7 +41,7 @@ Repository preparation
   -> CodeIndexer scans and extracts provider-backed material
   -> CodeGraphStore writes an active snapshot under the Repository `.mission/runtime`
 
-AgentExecutor.startExecution
+AgentExecution launch
   -> create AgentExecution protocol descriptor
   -> register open-mission-mcp access
   -> semantic operation catalog filters tools by AgentExecution scope
@@ -51,11 +51,11 @@ Agent calls code_search
   -> open-mission-mcp authorizes AgentExecution token
   -> validates code_search input
   -> AgentExecutionRegistry resolves active execution
-  -> AgentExecutor invokes AgentExecutionSemanticOperations
+  -> AgentExecution invokes AgentExecutionSemanticOperations
   -> semantic operation resolves one Code root from AgentExecution scope
   -> CodeIntelligenceService ensures usable index snapshot
   -> CodeGraphStore runs bounded query
-  -> AgentExecution journal records code-search runtime fact
+  -> AgentExecution journal records bounded code-search observation
   -> structured result returns through MCP
 ```
 
@@ -71,7 +71,7 @@ Responsibilities:
 - define Zod input and result schemas
 - validate operation availability by AgentExecution scope
 - invoke operation handlers
-- record AgentExecution runtime facts
+- record bounded daemon-observed AgentExecution observations
 - publish journal records for active executions
 
 It must not parse source code, run raw SurrealQL inline, or decide repository/worktree index lifecycle directly.
@@ -160,6 +160,10 @@ The CodeIndexer orchestration must be language-provider shaped from the start:
 
 The TypeScript/JavaScript compiler provider is only the first provider. Future Tree-sitter providers should plug into the same extraction contract rather than adding language branches to the scanner.
 
+The structural graph target is defined by [Code Intelligence Node Edge Graph Spec](code-intelligence-node-edge-graph-spec.md). The indexer should therefore emit canonical node and edge records with explicit `objectKind` and `relationKind` vocabulary rather than treating table names such as `CodeFile` or `CodeSymbol` as the durable type system.
+
+Markdown and other non-code text files should still participate in baseline indexing as file/document nodes. Optional Agent-assisted semantic enrichment for those files may run behind the indexer as a provider capability, but it must remain disabled by default and must not be required for a valid graph snapshot.
+
 ### Code Root Boundary
 
 Repository roots and Mission worktree roots both resolve to Code roots before indexing. A Mission task should resolve to the Mission worktree root when one exists because the active work may differ from the main Repository root, but the indexer, graph store, schemas, and semantic operations treat the resolved path as the same Code root concept.
@@ -191,134 +195,21 @@ The code graph schema module should export:
 - a compiled schema snapshot helper for tests and provisioning.
 - a generated SurQL helper that calls `compileDefineStatements(compileSchema({ models }))`.
 
-Recommended implementation shape:
-
-```ts
-import { z } from 'zod/v4';
-import { compileDefineStatements, compileSchema, defineModel, field, table } from '@flying-pillow/zod-surreal';
-
-export const CodeFileSchema = z.object({
-  id: z.string().register(field, { type: 'record<code_file>' }),
-  indexId: z.string().register(field, { type: 'record<code_index_snapshot>', reference: 'code_index_snapshot' }),
-  path: z.string().register(field, { type: 'string', index: 'normal' }),
-  language: z.string().optional().register(field, { type: 'option<string>' })
-}).strict().register(table, {
-  table: 'code_file',
-  schemafull: true,
-  indexes: [{ name: 'code_file_index_path_idx', fields: ['indexId', 'path'] }]
-});
-
-export const CodeGraphModels = [
-  defineModel({ name: 'CodeFile', schema: CodeFileSchema })
-];
-
-export function compileCodeGraphSurql(): string {
-  return `${compileDefineStatements(compileSchema({ models: CodeGraphModels })).join('\n')}\n`;
-}
-```
-
 The exact field metadata may change during implementation, but the direction is fixed: Zod schemas plus zod-surreal metadata generate the SurrealQL DDL.
 
-Recommended model names:
+The canonical persisted graph shape is now defined by [Code Intelligence Node Edge Graph Spec](code-intelligence-node-edge-graph-spec.md), not by the older `CodeFile` / `CodeSymbol` / `CodeRelation` table split. The broader code-intelligence spec should therefore treat the node-edge model as authoritative for:
 
-- `CodeIndexSnapshot`
-- `CodeFile`
-- `CodeSymbol`
-- `CodeRelation`
-- `CodeRoute`
-- `CodeTool`
-- `CodeProcess`
-- `CodeCluster`
+- `code_index_snapshot` ownership;
+- `code_object` node storage with explicit `objectKind`;
+- `code_relation` edge storage with explicit `relationKind`;
+- `snapshotId` as the canonical graph-record ownership field.
 
-Do not prefix these with `Repository` or `Mission`. The resolved Code root provides scope.
-
-### CodeIndexSnapshot
+Higher-level vocabulary such as routes, tools, processes, and clusters remains useful at the semantic-operation layer, but their persisted structural representation should follow the node-edge graph model unless a later spec or ADR explicitly specializes them.
 
 Fields:
 
 - `id`
-- `codeRootId`
-- `rootPath`
-- `commitSha`
-- `worktreeFingerprint`
-- `indexedAt`
-- `status`
-- `fileCount`
-- `symbolCount`
-- `relationCount`
-- `routeCount`
-- `toolCount`
-- `processCount`
-- `clusterCount`
-- `staleness`
-
-### CodeFile
-
-Fields:
-
-- `id`
-- `indexId`
-- `path`
-- `name`
-- `extension`
-- `language`
-- `hash`
-- `lineCount`
-- `indexed`
-- `skipReason`
-
-### CodeSymbol
-
-Fields:
-
-- `id`
-- `indexId`
-- `kind`
-- `name`
-- `qualifiedName`
-- `filePath`
-- `startLine`
-- `endLine`
-- `exported`
-- `signature`
-- `description`
-
-### CodeRelation
-
-Use a SurrealDB relation table generated from zod-surreal metadata. The relation table schema must declare `kind: 'relation'` plus fixed `from` and `to` table sets where zod-surreal supports them. If one generic relation table cannot express all node pairs cleanly, use a small set of generated relation tables behind the `CodeRelation` domain vocabulary rather than hand-writing SurQL.
-
-Fields:
-
-- `id`
-- `indexId`
-- `type`
-- `in`
-- `out`
-- `confidence`
-- `reason`
-- `step`
-- `evidence`
-
-### CodeRoute
-
-Fields:
-
-- `id`
-- `indexId`
-- `route`
-- `method`
-- `handlerSymbolId`
-- `handlerFilePath`
-- `responseKeys`
-- `errorKeys`
-- `middleware`
-
-### CodeTool
-
-Fields:
-
-- `id`
-- `indexId`
+- `snapshotId`
 - `name`
 - `handlerSymbolId`
 - `handlerFilePath`
@@ -372,7 +263,7 @@ Input:
 ```ts
 {
   target?: string;
-  targetId?: string;
+  id?: string;
   filePath?: string;
   direction: 'upstream' | 'downstream';
   maxDepth?: number;
@@ -428,13 +319,13 @@ Input:
 
 Result includes detected tool definitions and handlers.
 
-## Runtime Facts
+## Semantic Operation Journal Records
 
-Each accepted operation records a bounded runtime fact:
+Each accepted operation records a bounded daemon-observed AgentExecution observation:
 
 ```ts
-type CodeIntelligenceRuntimeFact = {
-  factType:
+type CodeIntelligenceOperationObservation = {
+  observationKind:
     | 'code-search'
     | 'symbol-context-read'
     | 'impact-analysis-read'
@@ -442,7 +333,7 @@ type CodeIntelligenceRuntimeFact = {
     | 'route-impact-read'
     | 'tool-context-read';
   operationName: string;
-  indexId: string;
+  snapshotId: string;
   codeRootId: string;
   rootPathHash: string;
   querySummary: Record<string, unknown>;
@@ -451,7 +342,7 @@ type CodeIntelligenceRuntimeFact = {
 };
 ```
 
-Do not store full result payloads in runtime facts by default. Store enough to audit that the Agent used code intelligence and what target/query it used.
+Do not store full result payloads in journal observations by default. Store enough to audit that the Agent used code intelligence and what target/query it used.
 
 ## Index Lifecycle
 
@@ -562,7 +453,7 @@ Required tests:
 - `symbol_context` returns disambiguation for duplicate names.
 - `impact_analysis` respects depth, direction, relation filters, and confidence.
 - stale indexes are reported in operation results.
-- runtime facts are appended for accepted operations and bounded in size.
+- bounded daemon-observed observations are appended for accepted operations.
 - Open Mission web visual graph APIs expose only daemon-owned read models and reject mutation or raw query behavior.
 
 ## Open Implementation Questions

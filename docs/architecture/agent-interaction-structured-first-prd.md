@@ -56,15 +56,15 @@ The operator must be able to:
 - understand whether an action is Mission-native, cross-agent, adapter-scoped, or terminal-only.
 - rely on the interaction journal for semantic audit and use terminal recordings for raw evidence.
 
-## Non-Goals
+## Scope Boundaries
 
-- Do not remove terminal support as part of the first structured-first implementation.
-- Do not implement every provider-native slash command as a Mission command.
-- Do not make provider-native terminal output the canonical source for workflow or context state.
-- Do not create a second chat model outside AgentExecution.
-- Do not make MCP tools public automation APIs.
-- Do not require every Agent adapter to support MCP before it can run.
-- Do not store all stdout/stderr as semantic journal records.
+- Terminal support remains part of the first structured-first implementation.
+- Provider-native slash commands become Mission commands only when they express stable Mission-owned intent.
+- Provider-native terminal output remains transport evidence until accepted through a structured Mission path.
+- AgentExecution remains the single chat and interaction model for execution work.
+- MCP tools remain local execution-scoped transport affordances.
+- Agents can run through stdout markers, provider output, or other supported transports when MCP is unavailable.
+- Semantic journals store accepted meaning; raw stdout/stderr stays in transport evidence unless promoted through structured observation.
 
 ## User Stories
 
@@ -100,7 +100,7 @@ Terminal access remains available for provider-native workflows, debugging, logi
 
 ### Descriptor-Driven UI
 
-Mission UI renders actions from descriptors. Surfaces do not hardcode provider commands or infer capabilities from adapter ids.
+Mission UI renders actions from descriptors. Provider command names and capability data come from AgentExecution and AgentAdapter descriptors.
 
 ### Portable Before Provider-Specific
 
@@ -108,7 +108,7 @@ Mission should normalize high-value portable intents first. Provider-specific co
 
 ### Semantic Journal, Raw Evidence
 
-The AgentExecution interaction journal records accepted meaning. Raw output remains transport evidence unless promoted into structured observations or runtime facts.
+The AgentExecution interaction journal records accepted meaning. Raw output remains transport evidence unless accepted through structured observations.
 
 ## Requirements
 

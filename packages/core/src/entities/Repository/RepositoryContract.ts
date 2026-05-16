@@ -4,8 +4,9 @@ import { Repository } from './Repository.js';
 import {
     RepositoryAddSchema,
     RepositoryCreateSchema,
-    RepositoryDataSchema,
     RepositoryInputSchema,
+    RepositoryInstanceInputSchema,
+    RepositorySchema,
     RepositoryStorageSchema,
     RepositoryPlatformOwnerSchema,
     RepositoryPlatformRepositorySchema,
@@ -17,8 +18,8 @@ import {
     RepositoryClassCommandsSchema,
     RepositoryGetIssueSchema,
     RepositoryLocatorSchema,
-    RepositoryCodeIntelligenceIndexSchema,
-    RepositoryReadCodeIntelligenceIndexSchema,
+    RepositoryCodeGraphSnapshotSchema,
+    RepositoryReadCodeGraphSnapshotSchema,
     RepositoryReadRemovalSummarySchema,
     RepositoryMissionStartAcknowledgementSchema,
     RepositoryIssueDetailSchema,
@@ -44,9 +45,9 @@ export const RepositoryContract: EntityContractType = {
     entityClass: Repository,
     inputSchema: RepositoryInputSchema,
     storageSchema: RepositoryStorageSchema,
-    dataSchema: RepositoryDataSchema,
+    dataSchema: RepositorySchema,
     properties: Object.fromEntries(
-        Object.entries(RepositoryDataSchema.shape).map(([name, schema]) => [
+        Object.entries(RepositorySchema.shape).map(([name, schema]) => [
             name,
             {
                 schema,
@@ -58,7 +59,7 @@ export const RepositoryContract: EntityContractType = {
         find: {
             kind: 'query',
             payload: RepositoryFindSchema,
-            result: RepositoryDataSchema.array(),
+            result: RepositorySchema.array(),
             execution: 'class'
         },
         findAvailable: {
@@ -87,25 +88,25 @@ export const RepositoryContract: EntityContractType = {
         },
         read: {
             kind: 'query',
-            payload: RepositoryLocatorSchema,
-            result: RepositoryDataSchema,
+            payload: RepositoryInstanceInputSchema,
+            result: RepositorySchema,
             execution: 'entity'
         },
         commands: {
             kind: 'query',
-            payload: RepositoryLocatorSchema,
+            payload: RepositoryInstanceInputSchema,
             result: EntityCommandViewSchema,
             execution: 'entity'
         },
         syncStatus: {
             kind: 'query',
-            payload: RepositoryLocatorSchema,
+            payload: RepositoryInstanceInputSchema,
             result: RepositorySyncStatusSchema,
             execution: 'entity'
         },
         listIssues: {
             kind: 'query',
-            payload: RepositoryLocatorSchema,
+            payload: RepositoryInstanceInputSchema,
             result: TrackedIssueSummarySchema.array(),
             execution: 'entity'
         },
@@ -121,16 +122,16 @@ export const RepositoryContract: EntityContractType = {
             result: RepositoryRemovalSummarySchema,
             execution: 'entity'
         },
-        readCodeIntelligenceIndex: {
+        readCodeGraphSnapshot: {
             kind: 'query',
-            payload: RepositoryReadCodeIntelligenceIndexSchema,
-            result: RepositoryCodeIntelligenceIndexSchema,
+            payload: RepositoryReadCodeGraphSnapshotSchema,
+            result: RepositoryCodeGraphSnapshotSchema,
             execution: 'entity'
         },
         add: {
             kind: 'mutation',
             payload: RepositoryAddSchema,
-            result: RepositoryDataSchema,
+            result: RepositorySchema,
             execution: 'class',
             ui: {
                 label: 'Clone',
@@ -142,7 +143,7 @@ export const RepositoryContract: EntityContractType = {
         createPlatformRepository: {
             kind: 'mutation',
             payload: RepositoryCreateSchema,
-            result: RepositoryDataSchema,
+            result: RepositorySchema,
             execution: 'class',
             ui: {
                 label: 'Create repository',
@@ -153,7 +154,7 @@ export const RepositoryContract: EntityContractType = {
         },
         remove: {
             kind: 'mutation',
-            payload: RepositoryLocatorSchema,
+            payload: RepositoryInstanceInputSchema,
             result: RepositoryRemoveAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -176,19 +177,19 @@ export const RepositoryContract: EntityContractType = {
         configureAgents: {
             kind: 'mutation',
             payload: RepositoryConfigureAgentsSchema,
-            result: RepositoryDataSchema,
+            result: RepositorySchema,
             execution: 'entity'
         },
         configureAgent: {
             kind: 'mutation',
             payload: RepositoryConfigureAgentSchema,
-            result: RepositoryDataSchema,
+            result: RepositorySchema,
             execution: 'entity'
         },
         configureDisplay: {
             kind: 'mutation',
             payload: RepositoryConfigureDisplaySchema,
-            result: RepositoryDataSchema,
+            result: RepositorySchema,
             execution: 'entity'
         },
         initialize: {
@@ -211,7 +212,7 @@ export const RepositoryContract: EntityContractType = {
         },
         fetchExternalState: {
             kind: 'mutation',
-            payload: RepositoryLocatorSchema,
+            payload: RepositoryInstanceInputSchema,
             result: RepositorySyncCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -223,7 +224,7 @@ export const RepositoryContract: EntityContractType = {
         },
         fastForwardFromExternal: {
             kind: 'mutation',
-            payload: RepositoryLocatorSchema,
+            payload: RepositoryInstanceInputSchema,
             result: RepositorySyncCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -240,12 +241,12 @@ export const RepositoryContract: EntityContractType = {
         },
         indexCode: {
             kind: 'mutation',
-            payload: RepositoryLocatorSchema,
+            payload: RepositoryInstanceInputSchema,
             result: RepositoryCodeIndexAcknowledgementSchema,
             execution: 'entity',
             ui: {
                 label: 'Index code',
-                description: 'Build a fresh local code intelligence index for this Repository.',
+                description: 'Build a fresh code graph snapshot for this Repository.',
                 variant: 'outline',
                 icon: 'database-zap',
                 presentationOrder: 30
@@ -262,11 +263,6 @@ export const RepositoryContract: EntityContractType = {
             payload: RepositoryStartMissionFromBriefSchema,
             result: RepositoryMissionStartAcknowledgementSchema,
             execution: 'entity'
-        }
-    },
-    events: {
-        missionStarted: {
-            payload: RepositoryMissionStartAcknowledgementSchema
         }
     }
 };

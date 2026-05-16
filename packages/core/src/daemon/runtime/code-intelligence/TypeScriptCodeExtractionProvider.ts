@@ -1,5 +1,6 @@
 import * as ts from 'typescript';
-import type { CodeSymbolKind } from './CodeGraphSchema.js';
+import * as path from 'node:path';
+import { createCodeFileObjectKey, createCodeSymbolObjectKey, type CodeSymbolKind } from './CodeGraphSchema.js';
 import { createEmptyCodeExtractionResult, type CodeExtractionProvider, type CodeExtractionResult, type CodeIndexedFileDraft } from './CodeExtractionProvider.js';
 
 const TYPESCRIPT_PROVIDER_LANGUAGES = ['typescript', 'tsx', 'javascript', 'jsx'] as const;
@@ -18,8 +19,8 @@ export class TypeScriptCodeExtractionProvider implements CodeExtractionProvider 
             return createEmptyCodeExtractionResult();
         }
         return {
-            symbols: extractExportedSymbols(input.file),
-            relations: extractImportRelations(input.file)
+            objects: extractExportedSymbols(input.file),
+            relations: extractImportRelations(input.file, input.files)
         };
     }
 }
@@ -28,8 +29,8 @@ export function createDefaultCodeExtractionProviders(): CodeExtractionProvider[]
     return [new TypeScriptCodeExtractionProvider()];
 }
 
-function extractExportedSymbols(file: CodeIndexedFileDraft): CodeExtractionResult['symbols'] {
-    const symbols: CodeExtractionResult['symbols'] = [];
+function extractExportedSymbols(file: CodeIndexedFileDraft): CodeExtractionResult['objects'] {
+    const symbols: CodeExtractionResult['objects'] = [];
     const sourceFile = createSourceFile(file);
     sourceFile.forEachChild((node) => {
         if (ts.isClassDeclaration(node) && isExportedDeclaration(node)) {
@@ -60,7 +61,7 @@ function extractExportedSymbols(file: CodeIndexedFileDraft): CodeExtractionResul
     return symbols;
 }
 
-function extractImportRelations(file: CodeIndexedFileDraft): CodeExtractionResult['relations'] {
+function extractImportRelations(file: CodeIndexedFileDraft, files: readonly CodeIndexedFileDraft[]): CodeExtractionResult['relations'] {
     const relations: CodeExtractionResult['relations'] = [];
     const seenTargets = new Set<string>();
 
@@ -69,24 +70,36 @@ function extractImportRelations(file: CodeIndexedFileDraft): CodeExtractionResul
         if (!trimmedTarget || seenTargets.has(trimmedTarget)) {
             return;
         }
+        const resolvedTargetPath = resolveImportTargetPath({ fromFilePath: file.path, target: trimmedTarget, files });
+        if (!resolvedTargetPath) {
+            return;
+        }
         seenTargets.add(trimmedTarget);
         relations.push({
-            fromFilePath: file.path,
-            kind: 'imports',
-            target: trimmedTarget
+            inObjectKey: createCodeFileObjectKey(file.path),
+            relationKind: 'imports',
+            outObjectKey: createCodeFileObjectKey(resolvedTargetPath)
         });
     }
 
     function visit(node: ts.Node): void {
         if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
             appendTarget(node.moduleSpecifier.text);
-        } else if (ts.isCallExpression(node)
+            return ts.forEachChild(node, visit);
+        }
+
+        if (ts.isCallExpression(node)
             && ts.isIdentifier(node.expression)
             && node.expression.text === 'require'
-            && node.arguments.length === 1
-            && ts.isStringLiteralLike(node.arguments[0])) {
-            appendTarget(node.arguments[0].text);
-        } else if (ts.isImportTypeNode(node)
+            && node.arguments.length === 1) {
+            const [firstArgument] = node.arguments;
+            if (firstArgument && ts.isStringLiteralLike(firstArgument)) {
+                appendTarget(firstArgument.text);
+            }
+            return ts.forEachChild(node, visit);
+        }
+
+        if (ts.isImportTypeNode(node)
             && ts.isLiteralTypeNode(node.argument)
             && ts.isStringLiteral(node.argument.literal)) {
             appendTarget(node.argument.literal.text);
@@ -131,7 +144,7 @@ function readVariableStatementKind(node: ts.VariableStatement): Extract<CodeSymb
 }
 
 function appendNamedSymbol(
-    symbols: CodeExtractionResult['symbols'],
+    symbols: CodeExtractionResult['objects'],
     sourceFile: ts.SourceFile,
     filePath: string,
     node: ts.Node,
@@ -145,11 +158,75 @@ function appendNamedSymbol(
     const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
     const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
     symbols.push({
-        filePath,
+        objectKey: createCodeSymbolObjectKey({
+            filePath,
+            symbolKind: kind,
+            name: trimmedName,
+            startLine: start.line + 1
+        }),
+        objectKind: 'symbol',
         name: trimmedName,
-        kind,
+        path: filePath,
+        symbolKind: kind,
         exported: true,
         startLine: start.line + 1,
         endLine: end.line + 1
     });
+}
+
+function resolveImportTargetPath(input: { fromFilePath: string; target: string; files: readonly CodeIndexedFileDraft[] }): string | undefined {
+    if (!input.target.startsWith('.')) {
+        return undefined;
+    }
+    const knownPaths = new Set(input.files.map((file) => file.path));
+    const basePath = path.posix.normalize(path.posix.join(path.posix.dirname(input.fromFilePath), input.target));
+    for (const candidate of createImportResolutionCandidates(basePath)) {
+        if (knownPaths.has(candidate)) {
+            return candidate;
+        }
+    }
+    return undefined;
+}
+
+function createImportResolutionCandidates(basePath: string): string[] {
+    const ext = path.posix.extname(basePath);
+    const withoutExt = ext ? basePath.slice(0, -ext.length) : basePath;
+    const directCandidates = ext
+        ? [
+            basePath,
+            ...mapImportExtension(ext, withoutExt)
+        ]
+        : [withoutExt];
+    const extensionCandidates = directCandidates.flatMap((candidate) => [
+        candidate,
+        `${candidate}.ts`,
+        `${candidate}.tsx`,
+        `${candidate}.js`,
+        `${candidate}.jsx`,
+        `${candidate}.mts`,
+        `${candidate}.cts`,
+        `${candidate}.mjs`,
+        `${candidate}.cjs`,
+        `${candidate}/index.ts`,
+        `${candidate}/index.tsx`,
+        `${candidate}/index.js`,
+        `${candidate}/index.jsx`
+    ]);
+    return Array.from(new Set(extensionCandidates));
+}
+
+function mapImportExtension(ext: string, basePathWithoutExt: string): string[] {
+    if (ext === '.js' || ext === '.mjs' || ext === '.cjs') {
+        return [
+            `${basePathWithoutExt}.ts`,
+            `${basePathWithoutExt}.tsx`,
+            `${basePathWithoutExt}.js`,
+            `${basePathWithoutExt}.jsx`,
+            `${basePathWithoutExt}.mts`,
+            `${basePathWithoutExt}.cts`,
+            `${basePathWithoutExt}.mjs`,
+            `${basePathWithoutExt}.cjs`
+        ];
+    }
+    return [];
 }

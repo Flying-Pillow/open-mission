@@ -12,13 +12,6 @@ function createLaunchConfig(overrides: Partial<AgentLaunchConfig> = {}): AgentLa
             stageId: 'implementation'
         },
         workingDirectory: '/tmp/work',
-        task: {
-            taskId: 'task-1',
-            stageId: 'implementation',
-            title: 'Implement the task',
-            description: 'Implement the task',
-            instruction: 'Implement the task.'
-        },
         specification: {
             summary: 'Implement the task.',
             documents: []

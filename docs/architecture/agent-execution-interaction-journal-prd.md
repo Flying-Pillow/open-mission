@@ -28,7 +28,7 @@ AgentExecution interaction is currently split across several useful but incomple
 - AgentExecution timeline projection provides a UI-friendly view, but it is not a durable source of truth for Mission-backed executions.
 - Observation idempotency is held in memory, so daemon restart or adapter replay can lose the durable duplicate ledger.
 - `execution.message` events carry loose text rather than a schema-backed semantic interaction record.
-- Input requests must not be modeled as lifecycle. They are collaboration attention plus current input-request state.
+- Input requests are modeled as collaboration attention plus current input-request state, separate from lifecycle.
 
 Without a canonical semantic journal, Open Mission timelines, recovery, audit, replay, and future provider integrations will each be tempted to derive truth from different sources.
 
@@ -47,15 +47,15 @@ The journal must allow the daemon to reconstruct:
 - latest retained runtime activity and telemetry when those facts are promoted into journal records.
 - idempotency state for processed observations and delivered messages.
 
-## Non-Goals
+## Scope Boundaries
 
-- Do not make Message a standalone Entity.
-- Do not collapse Terminal recordings, AgentExecution interaction journals, and Mission workflow event logs into one file or one event type.
-- Do not make Open Mission chat/timeline state authoritative.
-- Do not treat Agent signal file activity as filesystem truth.
-- Do not store raw private reasoning as semantic `thinking` content.
-- Do not expose MCP tools as stable public automation APIs.
-- Do not introduce owner-specific execution classes such as MissionAgentExecution, TaskAgentExecution, RepositoryAgentExecution, or ArtifactAgentExecution.
+- AgentExecution messages remain journal records and runtime-boundary interaction units rather than standalone Entities.
+- Terminal recordings, AgentExecution interaction journals, and Mission workflow event logs remain separate ledgers with separate authority.
+- Open Mission chat and timeline state remain projections over AgentExecution truth.
+- Agent signal file activity remains an Agent-authored claim until filesystem or git observation accepts it as external truth.
+- Private reasoning remains outside semantic journal content; only bounded summaries or accepted observations enter the journal.
+- MCP tools remain local execution-scoped transport affordances rather than stable public automation APIs.
+- System, Repository, Mission, Task, and Artifact owners all use the same AgentExecution class and journal model through owner references.
 
 ## Product Principles
 
@@ -152,12 +152,12 @@ activity: idle or communicating
 currentInputRequestId: <journal record id>
 ```
 
-Noisy progress and runtime telemetry should not be stored inside semantic state transitions. Progress percentages, token counts, streaming summaries, active file labels, and transient execution metadata belong in runtime activity records such as `activity.updated`, where they can be compacted or summarized without changing lifecycle replay.
+Noisy progress and process telemetry should not be stored inside semantic state transitions. Progress percentages, token counts, streaming summaries, active file labels, and transient execution metadata belong in activity records such as `activity.updated`, where they can be compacted or summarized without changing lifecycle replay.
 
-Live runtime state is a separate overlay:
+Live process state is a separate overlay:
 
 ```ts
-type AgentExecutionRuntimeSnapshot = {
+type AgentExecutionProcessSnapshot = {
   attachedTerminalAgentExecutionId?: string;
   activeTransportConnections: string[];
   activeToolCalls?: Array<{ toolCallId: string; toolName: string; startedAt: string }>;
@@ -177,10 +177,10 @@ agent-executions/<agent-execution-id>.metadata.json      runtime metadata and te
 mission.events.jsonl                                    Mission workflow orchestration truth
 ```
 
-Mission runtime data should store only workflow participation and references:
+Mission execution data should store only workflow participation and references:
 
 ```ts
-type AgentExecutionRuntimeState = {
+type MissionWorkflowAgentExecutionReferenceState = {
   agentExecutionId: string;
   taskId: string;
   agentId: string;
@@ -200,7 +200,7 @@ The Mission dossier path is a file-store choice, not a Mission-specific journal 
 - The journal records accepted AgentExecution messages, observations, decisions, state effects, and projection material.
 - Semantic state transitions are distinct from runtime activity or telemetry updates.
 - Terminal recordings remain raw transport audit and are not used as semantic source of truth.
-- Mission workflow event logs remain orchestration truth and do not become transcripts.
+- Mission workflow event logs remain orchestration truth, separate from transcripts.
 - AgentExecution projection data and Open Mission timelines are projections over the journal.
 - Observation duplicate detection survives daemon restart and replay.
 - `needs_input` creates a durable input-request record; operator response is a separate AgentExecutionMessage record.

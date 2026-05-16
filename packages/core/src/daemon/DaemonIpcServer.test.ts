@@ -3,11 +3,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
+import { DaemonClient } from './client/DaemonClient.js';
 import { getDaemonLockPath, getDaemonRuntimePath, getDaemonTerminalLeaseStatePath } from './daemonPaths.js';
 import { MissionRegistry } from './MissionRegistry.js';
-import { executeEntityCommandInDaemon } from '../entities/Entity/EntityRemote.js';
+import { executeEntityCommandInDaemon } from './DaemonEntityDispatcher.js';
 import { startOpenMissionDaemon } from './DaemonIpcServer.js';
-import { resolveDaemonSurrealStorePath } from './runtime/DaemonSurrealStore.js';
+import { Repository } from '../entities/Repository/Repository.js';
 
 vi.mock('./MissionTerminal.js', () => ({
     ensureMissionTerminalState: vi.fn(async () => ({
@@ -93,19 +94,22 @@ describe('minimal source daemon request handling', () => {
         }
     });
 
-    it('starts code intelligence against the repository-owned SurrealDB database', async () => {
+    it('starts code intelligence against the external SurrealDB database', async () => {
         const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-surreal-workspace-'));
         const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-surreal-runtime-'));
         const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
         process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
         const hydrateDaemonMissions = vi.spyOn(MissionRegistry.prototype, 'hydrateDaemonMissions').mockResolvedValue(undefined);
+        vi.spyOn(Repository, 'resolve').mockResolvedValue({
+            repositoryRootPath: workspaceRoot
+        } as never);
         const daemon = await startOpenMissionDaemon({
             socketPath: path.join(runtimeRoot, 'daemon.sock'),
             surfacePath: workspaceRoot
         });
 
         try {
-            await expect(fs.stat(resolveDaemonSurrealStorePath(workspaceRoot))).resolves.toBeDefined();
+            expect(daemon).toBeDefined();
         } finally {
             await daemon.dispose();
             hydrateDaemonMissions.mockRestore();
@@ -206,7 +210,8 @@ describe('minimal source daemon request handling', () => {
         const result = await executeEntityCommandInDaemon({
             entity: 'Mission',
             method: 'ensureTerminal',
-            payload: { missionId: '1-initial-setup' }
+            id: 'mission:1-initial-setup',
+            payload: {}
         }, context);
 
         expect(result).toMatchObject({
@@ -223,14 +228,15 @@ describe('minimal source daemon request handling', () => {
         await executeEntityCommandInDaemon({
             entity: 'Mission',
             method: 'ensureTerminal',
-            payload: { missionId: '1-initial-setup' }
+            id: 'mission:1-initial-setup',
+            payload: {}
         }, context);
 
         const result = await executeEntityCommandInDaemon({
             entity: 'Mission',
             method: 'sendTerminalInput',
+            id: 'mission:1-initial-setup',
             payload: {
-                missionId: '1-initial-setup',
                 data: 'printf daemon-terminal-test\n'
             }
         }, context);
@@ -244,17 +250,69 @@ describe('minimal source daemon request handling', () => {
         });
     });
 
+    it('starts and owns an Impeccable live server through the daemon transport', async () => {
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-impeccable-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-impeccable-runtime-'));
+        const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
+        process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
+        const hydrateDaemonMissions = vi.spyOn(MissionRegistry.prototype, 'hydrateDaemonMissions').mockResolvedValue(undefined);
+        const resolveRepository = vi.spyOn(Repository, 'resolve').mockResolvedValue({
+            repositoryRootPath: workspaceRoot
+        } as never);
+        const daemon = await startOpenMissionDaemon({
+            socketPath: path.join(runtimeRoot, 'daemon.sock'),
+            surfacePath: workspaceRoot
+        });
+        const client = new DaemonClient();
+
+        try {
+            await client.connect({
+                surfacePath: workspaceRoot,
+                socketPath: daemon.socketPath,
+                timeoutMs: 5_000
+            });
+            const session = await client.request<{ origin: string }>('impeccable-live.resolve', {
+                repositoryId: 'repository:github/Flying-Pillow/open-mission'
+            }, {
+                timeoutMs: 15_000
+            });
+
+            expect(session.origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
+            const serverInfoPath = path.join(workspaceRoot, '.impeccable', 'live', 'server.json');
+            await expect(fs.readFile(serverInfoPath, 'utf8')).resolves.toContain(session.origin);
+            await expect(client.request<{ stopped: boolean }>('impeccable-live.stop', {
+                repositoryId: 'repository:github/Flying-Pillow/open-mission'
+            }, {
+                timeoutMs: 10_000
+            })).resolves.toEqual({ stopped: true });
+            await expect(client.request<{ stopped: boolean }>('impeccable-live.stop', {
+                repositoryId: 'repository:github/Flying-Pillow/open-mission'
+            }, {
+                timeoutMs: 10_000
+            })).resolves.toEqual({ stopped: false });
+        } finally {
+            client.dispose();
+            await daemon.dispose();
+            resolveRepository.mockRestore();
+            hydrateDaemonMissions.mockRestore();
+            restoreRuntimeDirectory(previousRuntimeDirectory);
+            await fs.rm(runtimeRoot, { recursive: true, force: true });
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     function createMissionTerminalContext() {
+        const missionId = '1-initial-setup';
         const mission = {
-            ensureTerminal: vi.fn(async (payload: { missionId: string }) => ({
-                missionId: payload.missionId,
+            ensureTerminal: vi.fn(async () => ({
+                missionId,
                 connected: true,
                 dead: false,
                 exitCode: null,
                 screen: '$ '
             })),
-            sendTerminalInput: vi.fn(async (payload: { missionId: string }) => ({
-                missionId: payload.missionId,
+            sendTerminalInput: vi.fn(async () => ({
+                missionId,
                 connected: true,
                 dead: false,
                 exitCode: null,

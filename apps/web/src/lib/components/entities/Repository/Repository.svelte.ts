@@ -3,8 +3,8 @@ import type { MissionCatalogEntryType } from '@flying-pillow/open-mission-core/e
 import type { EntityCommandDescriptorType } from '@flying-pillow/open-mission-core/entities/Entity/EntitySchema';
 import type { AgentType, AgentOwnerSettingsType } from '@flying-pillow/open-mission-core/entities/Agent/AgentSchema';
 import { AgentExecutionDataSchema, type AgentExecutionDataType } from '@flying-pillow/open-mission-core/entities/AgentExecution/AgentExecutionSchema';
-import { RepositoryCodeIntelligenceIndexSchema, RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformOwnerSchema, RepositoryPlatformRepositorySchema, RepositoryRemovalSummarySchema, RepositorySetupResultSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
-import type { RepositoryCodeIntelligenceIndexType, RepositoryDataType, RepositoryIssueDetailType, RepositoryPlatformOwnerType, RepositoryRemovalSummaryType, RepositorySetupResultType, RepositorySettingsType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
+import { RepositoryCodeIntelligenceIndexSchema, RepositorySchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformOwnerSchema, RepositoryPlatformRepositorySchema, RepositoryRemovalSummarySchema, RepositorySetupResultSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryCodeIntelligenceIndexType, RepositoryType, RepositoryIssueDetailType, RepositoryPlatformOwnerType, RepositoryRemovalSummaryType, RepositorySetupResultType, RepositorySettingsType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/open-mission-core/entities/Repository/RepositorySchema';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
 import type { OpenMissionApplication } from '$lib/client/Application.svelte.js';
@@ -218,10 +218,10 @@ export class RepositoryProvisioningDialog {
 export type RepositoryDataLoader = (input: {
     id: string;
     repositoryRootPath?: string;
-}) => Promise<RepositoryDataType>;
+}) => Promise<RepositoryType>;
 
-export class Repository extends Entity<RepositoryDataType> {
-    public data = $state() as RepositoryDataType;
+export class Repository extends Entity<RepositoryType> {
+    public data = $state() as RepositoryType;
     private readonly loadData: RepositoryDataLoader;
     private readonly onChanged: (() => void) | undefined;
     private syncStatusValue = $state<RepositorySyncStatusType | undefined>();
@@ -238,7 +238,7 @@ export class Repository extends Entity<RepositoryDataType> {
     private missionStatusesValue = $state<Record<string, string | undefined>>({});
 
     public constructor(
-        data: RepositoryDataType,
+        data: RepositoryType,
         input: {
             loadData: RepositoryDataLoader;
             onChanged?: () => void;
@@ -303,6 +303,25 @@ export class Repository extends Entity<RepositoryDataType> {
         };
     }
 
+    public override async loadCommands(): Promise<EntityCommandDescriptorType[]> {
+        const view = EntityCommandViewSchema.parse(await qry({
+            entity: this.entityName,
+            method: 'commands',
+            id: this.id,
+            payload: {}
+        }).run());
+        return structuredClone(view.commands);
+    }
+
+    public override async executeCommand<TResult = unknown>(commandId: string, input?: unknown): Promise<TResult> {
+        return await cmd({
+            entity: this.entityName,
+            method: this.resolveRepositoryCommandMethod(commandId),
+            id: this.id,
+            payload: this.buildRepositoryPayload(input)
+        }) as TResult;
+    }
+
     public static async find(input: {
         run?: boolean;
     } = {}): Promise<Repository[]> {
@@ -311,7 +330,7 @@ export class Repository extends Entity<RepositoryDataType> {
             method: 'find',
             payload: {}
         });
-        const repositoryData = z.array(RepositoryDataSchema).parse(
+        const repositoryData = z.array(RepositorySchema).parse(
             input.run ? await repositoriesQuery.run() : await repositoriesQuery
         );
 
@@ -355,7 +374,7 @@ export class Repository extends Entity<RepositoryDataType> {
         const application = getApp();
 
         try {
-            const data = RepositoryDataSchema.parse(
+            const data = RepositorySchema.parse(
                 await Repository.executeClassCommand('repository.add', {
                     platform: 'github',
                     repositoryRef: input.repositoryRef,
@@ -406,7 +425,7 @@ export class Repository extends Entity<RepositoryDataType> {
         const repositoryRef = `${input.ownerLogin.trim()}/${input.repositoryName.trim()}`;
 
         try {
-            const data = RepositoryDataSchema.parse(
+            const data = RepositorySchema.parse(
                 await Repository.executeClassCommand('repository.createPlatformRepository', {
                     platform: 'github',
                     ownerLogin: input.ownerLogin,
@@ -533,7 +552,7 @@ export class Repository extends Entity<RepositoryDataType> {
         return this;
     }
 
-    public updateFromData(data: RepositoryDataType): this {
+    public updateFromData(data: RepositoryType): this {
         const previousRepositoryRootPath = this.data.repositoryRootPath;
         this.data = structuredClone(data);
         if (previousRepositoryRootPath !== data.repositoryRootPath) {
@@ -545,7 +564,7 @@ export class Repository extends Entity<RepositoryDataType> {
         return this;
     }
 
-    public applyData(data: RepositoryDataType): this {
+    public applyData(data: RepositoryType): this {
         return this.updateFromData(data);
     }
 
@@ -568,11 +587,12 @@ export class Repository extends Entity<RepositoryDataType> {
         return this.applySyncStatus(await qry({
             entity: 'Repository',
             method: 'syncStatus',
-            payload: this.entityLocator
+            id: this.id,
+            payload: {}
         }).run());
     }
 
-    public toData(): RepositoryDataType {
+    public toData(): RepositoryType {
         return structuredClone($state.snapshot(this.data));
     }
 
@@ -586,10 +606,8 @@ export class Repository extends Entity<RepositoryDataType> {
         return qry({
             entity: 'Repository',
             method: 'listIssues',
-            payload: {
-                id: this.data.id,
-                repositoryRootPath: this.data.repositoryRootPath
-            }
+            id: this.id,
+            payload: {}
         });
     }
 
@@ -598,11 +616,8 @@ export class Repository extends Entity<RepositoryDataType> {
             await qry({
                 entity: 'Repository',
                 method: 'getIssue',
-                payload: {
-                    id: this.data.id,
-                    repositoryRootPath: this.data.repositoryRootPath,
-                    issueNumber
-                }
+                id: this.id,
+                payload: { issueNumber }
             }).run()
         );
     }
@@ -612,7 +627,8 @@ export class Repository extends Entity<RepositoryDataType> {
             await qry({
                 entity: 'Repository',
                 method: 'readRemovalSummary',
-                payload: this.entityLocator
+                id: this.id,
+                payload: {}
             }).run()
         );
     }
@@ -622,7 +638,8 @@ export class Repository extends Entity<RepositoryDataType> {
             await qry({
                 entity: 'Repository',
                 method: 'readCodeIntelligenceIndex',
-                payload: this.entityLocator
+                id: this.id,
+                payload: {}
             }).run()
         );
     }
@@ -685,7 +702,7 @@ export class Repository extends Entity<RepositoryDataType> {
             ...(input.defaultModel ? { defaultModel: input.defaultModel } : {}),
             ...(input.defaultReasoningEffort ? { defaultReasoningEffort: input.defaultReasoningEffort } : {})
         };
-        this.applyData(RepositoryDataSchema.parse(await this.executeCommand(
+        this.applyData(RepositorySchema.parse(await this.executeCommand(
             this.commandIdFor('configureAgent'),
             commandInput
         )));
@@ -696,7 +713,7 @@ export class Repository extends Entity<RepositoryDataType> {
     public async configureDisplay(input: {
         icon: string | null;
     }): Promise<this> {
-        this.applyData(RepositoryDataSchema.parse(await this.executeCommand(
+        this.applyData(RepositorySchema.parse(await this.executeCommand(
             this.commandIdFor('configureDisplay'),
             input
         )));
@@ -804,13 +821,36 @@ export class Repository extends Entity<RepositoryDataType> {
             throw new Error('Complete Repository initialization before starting regular missions.');
         }
     }
+
+    private buildRepositoryPayload(input: unknown): Record<string, unknown> {
+        if (input === undefined) {
+            return {};
+        }
+        if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+            return { input };
+        }
+        return structuredClone(input as Record<string, unknown>);
+    }
+
+    private resolveRepositoryCommandMethod(commandId: string): string {
+        const prefix = `${this.entityName.charAt(0).toLowerCase()}${this.entityName.slice(1)}.`;
+        const normalizedCommandId = commandId.trim();
+        if (!normalizedCommandId.startsWith(prefix)) {
+            throw new Error(`Command '${commandId}' does not belong to Entity '${this.entityName}'.`);
+        }
+        const methodName = normalizedCommandId.slice(prefix.length).trim();
+        if (!methodName) {
+            throw new Error(`Command '${commandId}' does not include an Entity method name.`);
+        }
+        return methodName;
+    }
 }
 
-export function getRepositoryDisplayName(repository: Pick<RepositoryDataType, 'platformRepositoryRef' | 'repoName'>): string {
+export function getRepositoryDisplayName(repository: Pick<RepositoryType, 'platformRepositoryRef' | 'repoName'>): string {
     return repository.platformRepositoryRef ?? repository.repoName;
 }
 
-export function getRepositoryDisplayDescription(repository: Pick<RepositoryDataType, 'platformRepositoryRef' | 'repositoryRootPath'>): string {
+export function getRepositoryDisplayDescription(repository: Pick<RepositoryType, 'platformRepositoryRef' | 'repositoryRootPath'>): string {
     return repository.platformRepositoryRef ?? repository.repositoryRootPath;
 }
 

@@ -37,6 +37,7 @@ Canonical Entity identity, schema roles, class authority, naming, and Entity com
 - [Entity Schema And Type Naming Convention](0001.04-entity-schema-and-type-naming-convention.md)
 - [Entity Commands As Canonical Operator Surface](0001.05-entity-commands-as-canonical-operator-surface.md)
 - [Artifacts Are File-Rooted Entities](0001.06-artifacts-are-file-rooted-entities.md)
+- [Entity Dependency Direction And Infrastructure Independence](0001.07-entity-dependency-direction-and-infrastructure-independence.md)
 
 ### 0002 Repository Control And Setup
 
@@ -92,4 +93,6 @@ AgentExecution identity, context, structured interaction, transport, persistence
 
 Proposed decisions keep their structural family number, but stay outside the accepted family list until accepted.
 
+- [Code Intelligence Node Edge Graph Model](0004.04-code-intelligence-node-edge-graph-model.md)
+- [OGM-Anchored Entity Storage And Hydrated View Model](0001.08-ogm-anchored-entity-storage-and-hydrated-view-model.md)
 - [Typed Agent Execution Journal Ledger](0006.13-typed-agent-execution-journal-ledger.md)

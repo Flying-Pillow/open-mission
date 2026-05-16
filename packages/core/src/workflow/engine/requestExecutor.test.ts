@@ -13,7 +13,7 @@ import { AgentRegistry } from '../../entities/Agent/AgentRegistry.js';
 import type { WorkflowTaskRuntimeState, WorkflowRequest } from './types.js';
 import type { TaskDossierRecordType } from '../../entities/Task/TaskSchema.js';
 import type { AgentExecutionReference } from '../../entities/AgentExecution/AgentExecutionSchema.js';
-import type { AgentExecution } from '../../entities/AgentExecution/AgentExecution.js';
+import type { ManagedAgentExecution } from '../../daemon/runtime/agent-execution/AgentExecutionRegistry.js';
 
 function createDescriptor(): MissionDescriptor {
 	return {
@@ -451,15 +451,6 @@ describe('WorkflowRequestExecutor', () => {
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
 
-		await executor.reconcileExecution({
-			agentId: 'fake-adapter',
-			agentExecutionId: 'AgentExecution-detached',
-			transport: {
-				kind: 'terminal',
-				terminalName: 'AgentExecution-detached'
-			}
-		});
-
 		const events = await executor.cancelProcessAgentExecution(
 			'AgentExecution-detached',
 			'cleanup detached runtime',
@@ -503,7 +494,7 @@ describe('WorkflowRequestExecutor', () => {
 			} satisfies WorkflowRequest]
 		});
 
-		const agentExecutionId = agentAdapter.listExecutions()[0]?.reference.agentExecutionId;
+		const agentExecutionId = agentAdapter.listExecutions()[0]?.getSnapshot().agentExecutionId;
 		if (!agentExecutionId) {
 			throw new Error('Expected a launched fake adapter execution.');
 		}
@@ -658,7 +649,7 @@ describe('WorkflowRequestExecutor', () => {
 
 	it('does not synthesize termination when runtime AgentExecution reattach fails', async () => {
 		class ThrowingReconcileAdapter extends FakeAgentAdapter {
-			public override async reconcileExecution(_reference: AgentExecutionReference): Promise<AgentExecution> {
+			public override async reconcileExecution(_reference: AgentExecutionReference): Promise<ManagedAgentExecution> {
 				throw new Error('runtime attach failed');
 			}
 		}
@@ -785,7 +776,7 @@ describe('WorkflowRequestExecutor', () => {
 
 	it('does not reconcile persisted terminals that are already terminated', async () => {
 		class ThrowingReconcileAdapter extends FakeAgentAdapter {
-			public override async reconcileExecution(_reference: AgentExecutionReference): Promise<AgentExecution> {
+			public override async reconcileExecution(_reference: AgentExecutionReference): Promise<ManagedAgentExecution> {
 				throw new Error('terminated agentExecutions should not be reconciled');
 			}
 		}

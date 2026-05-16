@@ -15,7 +15,7 @@ The implementation defines a projection contract and Open Mission rendering arch
 ## Authoritative Inputs
 
 - `CONTEXT.md`: canonical Mission vocabulary.
-- ADR-0006.01: AgentExecution, AgentExecutor, AgentAdapter, and Terminal vocabulary.
+- ADR-0006.01: AgentExecution, AgentExecutionRegistry, AgentAdapter, and Terminal vocabulary.
 - ADR-0006.05: AgentExecution structured interaction vocabulary.
 - ADR-0006.08: AgentExecution interaction journal persistence.
 - [Agent Execution Interaction Journal PRD](agent-execution-interaction-journal-prd.md).
@@ -86,7 +86,7 @@ type AgentExecutionProjection = {
   timelineItems: AgentExecutionTimelineItem[];
   currentActivity?: AgentExecutionActivityProjection;
   currentAttention?: AgentExecutionAttentionProjection;
-  runtimeOverlay?: AgentExecutionRuntimeOverlayProjection;
+  processOverlay?: AgentExecutionProcessOverlayProjection;
 };
 ```
 
@@ -229,7 +229,7 @@ type AgentExecutionInteractionAffordance = {
 Affordance rules:
 
 - Affordances derive from AgentExecution message descriptors, Entity command descriptors, interaction capabilities, runtime state, ownership, scope, and policy.
-- Open Mission may hide, disable, or explain controls based on affordances, but it must not invent authority that the AgentExecution contract does not expose.
+- Open Mission may hide, disable, or explain controls based on affordances; action authority comes from the AgentExecution contract and owning Entity commands.
 - `canReply` applies to conversational or input-request items that can accept an operator AgentExecutionMessage.
 - `canApprove` and `canReject` apply to verification, approval, permission, or review items whose owner Entity exposes a legal decision path.
 - `canInterrupt` and `canResume` apply to execution-level controls and must respect current lifecycle, attention, runtime capabilities, and command descriptors.
@@ -254,7 +254,7 @@ Rules:
 - Journal-derived items set `durable: true` and include source record ids when available.
 - Live runtime overlay items set `durable: false` and `liveOverlay: true`.
 - Projection material derived from low-confidence observations should expose that confidence so Open Mission can collapse or label it.
-- Open Mission must not invent source record ids.
+- Source record ids come from backend projection and journal replay.
 
 ## Payload Families
 
@@ -333,7 +333,7 @@ Baseline mapping from semantic journal records. This table defines required regi
 
 Projection mapping must be implemented in an AgentExecution-owned projection/replay module or shared contract layer, not in Svelte components.
 
-The backend projects `observation.recorded.signal` directly to `timelineItems` through `AgentExecutionSignalRegistry.ts`. Timeline projection should continue to reuse that registry-driven dispatch model and add timeline-specific projection metadata either to the signal registry entry or to an AgentExecution-owned projection registry keyed by signal type. It must not re-create the signal mapping inside Open Mission.
+The backend projects `observation.recorded.signal` directly to `timelineItems` through `AgentExecutionSignalRegistry.ts`. Timeline projection should continue to reuse that registry-driven dispatch model and add timeline-specific projection metadata either to the signal registry entry or to an AgentExecution-owned projection registry keyed by signal type. Open Mission consumes the projected output.
 
 ## Open Mission Component Architecture
 
@@ -369,7 +369,7 @@ Phase one can keep the existing component files and introduce these names gradua
 
 ## Journal Entry Component Matrix
 
-Open Mission must not render journal records one-to-one as raw rows. It should render projection items produced from registry-backed journal replay through specialized components.
+Open Mission renders projection items produced from registry-backed journal replay through specialized components rather than showing raw journal rows.
 
 This matrix is a component coverage matrix for projection families. It is not a replacement for the journal record registry or the signal registry.
 
@@ -399,7 +399,7 @@ This matrix is a component coverage matrix for projection families. It is not a 
 
 ### Collapsible Reasoning Blocks
 
-`ReasoningSummaryItem` renders curated reasoning summaries or summarized historical regions. It must be collapsed by default unless the item is the active replay target or has warning/error severity. It must not render raw private reasoning content.
+`ReasoningSummaryItem` renders curated reasoning summaries or summarized historical regions. It is collapsed by default unless the item is the active replay target or has warning/error severity. Raw private reasoning content stays outside the rendered timeline.
 
 ### Sticky Task Progress
 
@@ -411,7 +411,7 @@ This matrix is a component coverage matrix for projection families. It is not a 
 
 ### Timeline Replay
 
-`AgentExecutionReplayControls` lets the operator inspect historical journal-derived state by record sequence, timestamp, or replay anchor. Replay mode must be read-only: it can change the displayed projection window and highlighted state, but it must not mutate AgentExecution, Mission workflow, Terminal, or Artifact state.
+`AgentExecutionReplayControls` lets the operator inspect historical journal-derived state by record sequence, timestamp, or replay anchor. Replay mode is read-only: it changes the displayed projection window and highlighted state while AgentExecution, Mission workflow, Terminal, and Artifact state remain unchanged.
 
 ### Branch Navigation
 
@@ -423,7 +423,7 @@ This matrix is a component coverage matrix for projection families. It is not a 
 
 ### Synchronized Terminal Output
 
-`SynchronizedTerminalEvidencePanel` opens the terminal recording near the timestamp or sequence window associated with the selected timeline item. It should support jump-to-terminal-evidence from runtime warnings, tool activity, failures, and terminal snippets. It must not cause the full terminal stream to become the primary timeline body.
+`SynchronizedTerminalEvidencePanel` opens the terminal recording near the timestamp or sequence window associated with the selected timeline item. It should support jump-to-terminal-evidence from runtime warnings, tool activity, failures, and terminal snippets. The full terminal stream remains in the terminal evidence lane rather than becoming the primary timeline body.
 
 ## Grouping And Compaction Rules
 
@@ -486,7 +486,7 @@ Examples:
 - provider stream interrupted.
 - in-flight delivery attempt.
 
-If a runtime overlay fact must survive restart or explain a past decision, backend code should promote it into a journal record. Open Mission must not make that promotion locally.
+If a runtime overlay fact must survive restart or explain a past decision, backend code promotes it into a journal record. Open Mission renders the resulting projection.
 
 Runtime overlay composition may drive sticky progress, terminal attachment badges, synchronized terminal evidence affordances, and streaming indicators. These UI states must be visibly live or provisional when they are not journal-backed.
 
@@ -509,7 +509,7 @@ Timeline and terminal synchronization rules:
 
 ## Virtualization And Materialization
 
-Do not build a full timeline engine before projection volume requires it.
+Build the full timeline engine when projection volume requires it.
 
 Phase sequencing:
 
@@ -547,7 +547,7 @@ The graph view should be a higher-level projection over existing owners:
 - Artifact projections for produced, consumed, and evolved Mission artifacts.
 - Repository projections for branch, worktree, and SCM context when relevant.
 
-Graph nodes and edges must retain source projection provenance. The graph must not become a new source of execution truth, workflow legality, artifact ownership, or runtime state.
+Graph nodes and edges retain source projection provenance. The graph remains a higher-level projection over execution truth, workflow legality, artifact ownership, and runtime state.
 
 ## Tests And Validation
 
@@ -562,7 +562,7 @@ Implementation should add deterministic coverage when code changes begin:
 - Open Mission component tests for input request, blocked, runtime warning, verification result, activity, and normal conversation rendering.
 - accessibility checks for severity labels and actionable controls.
 - responsive checks for mobile layout with long text, unresolved input requests, and runtime warnings.
-- terminal separation tests proving terminal panel/snippets do not become semantic timeline truth.
+- terminal separation tests proving terminal panel/snippets remain evidence rather than semantic timeline truth.
 - component mapping tests proving each journal-derived projection family renders through the intended component class.
 - replay UI tests proving replay mode changes displayed state without mutating AgentExecution or Mission state.
 - scroll-to-step tests proving navigation landmarks survive grouping, compaction, and virtualization.

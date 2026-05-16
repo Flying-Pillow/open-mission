@@ -1,9 +1,18 @@
+import { field, table } from '@flying-pillow/zod-surreal';
 import { z } from 'zod/v4';
 import { AgentOwnerSettingsSchema } from '../Agent/AgentSchema.js';
+import { EntityIdSchema, EntityStorageSchema } from '../Entity/EntitySchema.js';
 
 export const DEFAULT_SYSTEM_AGENT_ADAPTER_ID = 'codex';
+export const systemEntityName = 'System' as const;
+export const systemTableName = 'system' as const;
+export const systemSingletonId = 'system:singleton' as const;
 
 export const SystemAgentSettingsSchema = AgentOwnerSettingsSchema;
+
+const systemPathSchema = z.string().trim().min(1);
+const optionalSystemPathSchema = z.string().trim().min(1).optional();
+const systemPackageVersionSchema = z.string().trim().min(1);
 
 export const githubSystemStateSchema = z.object({
     cliAvailable: z.boolean(),
@@ -20,6 +29,81 @@ export const systemConfigSchema = SystemAgentSettingsSchema.extend({
 
 export const SystemRepositoriesSettingsSchema = z.object({
     repositoriesRoot: systemConfigSchema.shape.repositoriesRoot
+}).strict();
+
+export const SystemStorageSchema = EntityStorageSchema.extend({
+    id: EntityIdSchema.meta({
+        description: 'Canonical singleton Entity id for the Open Mission system record.'
+    }).register(field, {
+        description: 'Canonical singleton Entity id for the Open Mission system record.'
+    }),
+    repositoriesRoot: systemPathSchema.meta({
+        description: 'Filesystem root path where Repository discovery scans for checked-out repositories.'
+    }).register(field, {
+        description: 'Filesystem root path where Repository discovery scans for checked-out repositories.'
+    }),
+    missionsRoot: systemPathSchema.meta({
+        description: 'Filesystem root path where Mission worktrees are materialized.'
+    }).register(field, {
+        description: 'Filesystem root path where Mission worktrees are materialized.'
+    }),
+    defaultAgentAdapter: SystemAgentSettingsSchema.shape.defaultAgentAdapter.meta({
+        description: 'Default Agent adapter selected for system-scoped work.'
+    }).register(field, {
+        description: 'Default Agent adapter selected for system-scoped work.'
+    }),
+    enabledAgentAdapters: SystemAgentSettingsSchema.shape.enabledAgentAdapters.meta({
+        description: 'Agent adapters enabled for system-scoped work.'
+    }).register(field, {
+        description: 'Agent adapters enabled for system-scoped work.'
+    }),
+    defaultAgentMode: SystemAgentSettingsSchema.shape.defaultAgentMode.meta({
+        description: 'Optional default AgentExecution launch mode for system-scoped work.'
+    }).register(field, {
+        optional: true,
+        description: 'Optional default AgentExecution launch mode for system-scoped work.'
+    }),
+    defaultModel: SystemAgentSettingsSchema.shape.defaultModel.meta({
+        description: 'Optional default model name for system-scoped Agent launches.'
+    }).register(field, {
+        optional: true,
+        description: 'Optional default model name for system-scoped Agent launches.'
+    }),
+    defaultReasoningEffort: SystemAgentSettingsSchema.shape.defaultReasoningEffort.meta({
+        description: 'Optional default reasoning effort for system-scoped Agent launches.'
+    }).register(field, {
+        optional: true,
+        description: 'Optional default reasoning effort for system-scoped Agent launches.'
+    }),
+    ghBinary: optionalSystemPathSchema.meta({
+        description: 'Optional GitHub CLI binary path used for GitHub-backed system status checks and repository operations.'
+    }).register(field, {
+        optional: true,
+        description: 'Optional GitHub CLI binary path used for GitHub-backed system status checks and repository operations.'
+    }),
+    packageVersion: systemPackageVersionSchema.meta({
+        description: 'Open Mission package version recorded when the singleton system record was created.'
+    }).register(field, {
+        description: 'Open Mission package version recorded when the singleton system record was created.'
+    })
+}).strict().meta({
+    description: 'Canonical persisted singleton system record for Open Mission.'
+}).register(table, {
+    table: systemTableName,
+    schemafull: true,
+    description: 'Canonical persisted singleton system records for Open Mission.'
+});
+
+export const SystemSettingsUpdateSchema = z.object({
+    repositoriesRoot: systemPathSchema.optional().meta({
+        description: 'Optional Repository root path update for the singleton system record.'
+    }),
+    missionsRoot: systemPathSchema.optional().meta({
+        description: 'Optional Mission worktrees root path update for the singleton system record.'
+    }),
+    ghBinary: z.union([z.string().trim().min(1), z.null()]).optional().meta({
+        description: 'Optional GitHub CLI binary override for the singleton system record. Null clears the stored override.'
+    })
 }).strict();
 
 export const daemonSystemStateSchema = z.object({
@@ -66,10 +150,9 @@ export const runtimeSystemStateSchema = z.object({
     orphanedRuntimeLeases: z.number().int().nonnegative(),
     surreal: z.object({
         available: z.boolean(),
-        engine: z.enum(['mem', 'surrealkv']),
+        engine: z.literal('remote'),
         namespace: z.string().trim().min(1),
         database: z.string().trim().min(1),
-        storagePath: z.string().trim().min(1).optional(),
         connectedAt: z.string().trim().min(1).optional(),
         detail: z.string().trim().min(1).optional()
     }).strict().optional()
@@ -95,11 +178,9 @@ const defaultSystemAgentSettings: SystemAgentSettingsType = {
     enabledAgentAdapters: []
 };
 
-export const systemEntityName = 'System' as const;
-
 export const SystemReadSchema = z.object({}).strict();
-export const SystemConfigureSchema = SystemRepositoriesSettingsSchema;
-export const SystemDataSchema = systemConfigSchema;
+export const SystemConfigureSchema = SystemSettingsUpdateSchema;
+export const SystemDataSchema = SystemStorageSchema;
 
 export function createDefaultSystemAgentSettings(): SystemAgentSettingsType {
     return structuredClone(defaultSystemAgentSettings);
@@ -120,6 +201,8 @@ export type SystemAgentSettingsType = z.infer<typeof SystemAgentSettingsSchema>;
 export type GithubSystemState = z.infer<typeof githubSystemStateSchema>;
 export type SystemConfig = z.infer<typeof systemConfigSchema>;
 export type SystemRepositoriesSettingsType = z.infer<typeof SystemRepositoriesSettingsSchema>;
+export type SystemSettingsUpdateType = z.infer<typeof SystemSettingsUpdateSchema>;
+export type SystemStorageType = z.infer<typeof SystemStorageSchema>;
 export type DaemonSystemState = z.infer<typeof daemonSystemStateSchema>;
 export type HostSystemState = z.infer<typeof hostSystemStateSchema>;
 export type RuntimeSystemState = z.infer<typeof runtimeSystemStateSchema>;

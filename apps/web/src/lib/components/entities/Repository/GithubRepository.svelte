@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { RepositoryDataSchema } from "@flying-pillow/open-mission-core/entities/Repository/RepositorySchema";
+    import { RepositorySchema } from "@flying-pillow/open-mission-core/entities/Repository/RepositorySchema";
     import type { RepositoryPlatformRepositoryType } from "@flying-pillow/open-mission-core/entities/Repository/RepositorySchema";
     import { goto } from "$app/navigation";
     import Icon from "@iconify/svelte";
@@ -63,7 +63,7 @@
     async function executeRepositoryClassCommand(
         commandId: string,
     ): Promise<void> {
-        const data = RepositoryDataSchema.parse(
+        const data = RepositorySchema.parse(
             await RepositoryEntity.executeClassCommand(commandId, commandInput),
         );
         const addedRepository = app.hydrateRepositoryData(data);
@@ -310,8 +310,8 @@
                                 {configuredRepositoriesRoot}
                             </div>
                             <p class="text-sm text-muted-foreground">
-                                Open Mission reads this path from Mission settings.
-                                The daemon will clone into:
+                                Open Mission reads this path from Mission
+                                settings. The daemon will clone into:
                                 <span
                                     class="mt-1 block font-mono text-xs text-foreground"
                                 >

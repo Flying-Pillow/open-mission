@@ -17,3 +17,5 @@ description: Where the main Mission responsibilities live in the monorepo.
 | .agents | agent instructions and skills |
 
 No workspace should absorb another workspace's responsibility for convenience.
+
+Inside `packages/core`, Entity model and daemon runtime remain separate ownership areas. Generic Entity infrastructure must stay child-independent and daemon-independent. Daemon-owned dispatch modules may compose concrete Entity contracts, registries, runtime services, and adapters, but those concrete dependencies must not be pulled into base Entity modules.

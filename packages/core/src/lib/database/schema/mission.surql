@@ -1,0 +1,18 @@
+DEFINE TABLE OVERWRITE mission TYPE NORMAL SCHEMAFULL COMMENT "Mission physical storage record. SurrealDB record id is the Mission identity.";
+DEFINE FIELD OVERWRITE assignee ON TABLE mission TYPE option<object> COMMENT "Optional Mission assignee stored in the physical Mission record.";
+DEFINE FIELD OVERWRITE branchRef ON TABLE mission TYPE string COMMENT "Mission branch ref stored in the physical Mission record.";
+DEFINE INDEX OVERWRITE mission_branchref_idx ON TABLE mission FIELDS branchRef UNIQUE;
+DEFINE FIELD OVERWRITE currentStageId ON TABLE mission TYPE option<record<stage>> REFERENCE COMMENT "Optional current Stage reference stored in the physical Mission record.";
+DEFINE FIELD OVERWRITE issueId ON TABLE mission TYPE option<int> COMMENT "Optional hosted issue number associated with the Mission.";
+DEFINE INDEX OVERWRITE mission_issueid_idx ON TABLE mission FIELDS issueId;
+DEFINE FIELD OVERWRITE lifecycle ON TABLE mission TYPE option<string> COMMENT "Optional Mission lifecycle state stored in the physical Mission record.";
+DEFINE INDEX OVERWRITE mission_lifecycle_idx ON TABLE mission FIELDS lifecycle;
+DEFINE FIELD OVERWRITE missionDir ON TABLE mission TYPE string COMMENT "Tracked Mission directory path stored in the physical Mission record.";
+DEFINE FIELD OVERWRITE missionRootDir ON TABLE mission TYPE string COMMENT "Mission worktree root directory stored in the physical Mission record.";
+DEFINE FIELD OVERWRITE operationalMode ON TABLE mission TYPE option<string> COMMENT "Optional Mission operational mode stored in the physical Mission record.";
+DEFINE FIELD OVERWRITE recommendedAction ON TABLE mission TYPE option<string> COMMENT "Optional recommended operator action stored in the physical Mission record.";
+DEFINE FIELD OVERWRITE title ON TABLE mission TYPE string COMMENT "Mission title stored in the physical Mission record.";
+DEFINE INDEX OVERWRITE mission_title_ft_idx ON TABLE mission FIELDS title FULLTEXT ANALYZER default_text_analyzer BM25(1.2,0.75) HIGHLIGHTS;
+DEFINE FIELD OVERWRITE type ON TABLE mission TYPE string COMMENT "Mission type stored in the physical Mission record.";
+DEFINE INDEX OVERWRITE mission_type_idx ON TABLE mission FIELDS type;
+DEFINE FIELD OVERWRITE updatedAt ON TABLE mission TYPE option<string> COMMENT "Optional last-update timestamp stored in the physical Mission record.";

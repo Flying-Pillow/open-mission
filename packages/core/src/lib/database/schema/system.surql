@@ -1,0 +1,10 @@
+DEFINE TABLE OVERWRITE system TYPE NORMAL SCHEMAFULL COMMENT "Canonical persisted singleton system records for Open Mission.";
+DEFINE FIELD OVERWRITE defaultAgentAdapter ON TABLE system TYPE string COMMENT "Default Agent adapter selected for system-scoped work.";
+DEFINE FIELD OVERWRITE defaultAgentMode ON TABLE system TYPE option<string> COMMENT "Optional default AgentExecution launch mode for system-scoped work.";
+DEFINE FIELD OVERWRITE defaultModel ON TABLE system TYPE option<string> COMMENT "Optional default model name for system-scoped Agent launches.";
+DEFINE FIELD OVERWRITE defaultReasoningEffort ON TABLE system TYPE option<string> COMMENT "Optional default reasoning effort for system-scoped Agent launches.";
+DEFINE FIELD OVERWRITE enabledAgentAdapters ON TABLE system TYPE array<string> COMMENT "Agent adapters enabled for system-scoped work.";
+DEFINE FIELD OVERWRITE ghBinary ON TABLE system TYPE option<string> COMMENT "Optional GitHub CLI binary path used for GitHub-backed system status checks and repository operations.";
+DEFINE FIELD OVERWRITE missionsRoot ON TABLE system TYPE string COMMENT "Filesystem root path where Mission worktrees are materialized.";
+DEFINE FIELD OVERWRITE packageVersion ON TABLE system TYPE string COMMENT "Open Mission package version recorded when the singleton system record was created.";
+DEFINE FIELD OVERWRITE repositoriesRoot ON TABLE system TYPE string COMMENT "Filesystem root path where Repository discovery scans for checked-out repositories.";

@@ -1,7 +1,15 @@
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { compileDefineStatements, compileSchema, defineModel, getTableMetadata } from '@flying-pillow/zod-surreal';
+import {
+    compileDefineAnalyzerStatement,
+    compileDefineFieldAndIndexStatements,
+    compileDefineTableIndexStatement,
+    compileDefineTableStatement,
+    compileSchema,
+    defineModel,
+    getTableMetadata
+} from '@flying-pillow/zod-surreal';
 import type { z } from 'zod/v4';
 
 type GeneratedSchema = {
@@ -11,15 +19,22 @@ type GeneratedSchema = {
     tableName: string;
 };
 
+type LoadedSchemaModel = {
+    entityName: string;
+    schema: z.ZodObject;
+    tableName: string;
+};
+
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDirectory, '..');
 const entitiesDirectory = path.join(packageRoot, 'src/entities');
-const outputDirectory = path.join(packageRoot, 'src/lib/database');
+const outputDirectory = path.join(packageRoot, 'src/lib/database/schema');
 
 const schemaFilePattern = /^[A-Z][A-Za-z0-9]*Schema\.ts$/;
 const storageSchemaExportPattern = /^[A-Z][A-Za-z0-9]*StorageSchema$/;
 
 const schemaFiles = await findEntitySchemaFiles(entitiesDirectory);
+const loadedModels: LoadedSchemaModel[] = [];
 const generatedSchemas: GeneratedSchema[] = [];
 const skippedSchemas: string[] = [];
 const failedSchemas: string[] = [];
@@ -38,14 +53,54 @@ for (const schemaFile of schemaFiles) {
 
     const moduleSchemas = Object.entries(schemaModule)
         .filter(([exportName, schema]) => storageSchemaExportPattern.test(exportName) && isZodObject(schema))
-        .flatMap(([exportName, schema]) => compileStorageSchema(exportName, schema));
+        .flatMap(([exportName, schema]) => {
+            try {
+                return loadStorageSchema(exportName, schema);
+            } catch (error) {
+                failedSchemas.push(`${relativeSchemaFile}:${exportName}: ${formatError(error)}`);
+                return [];
+            }
+        });
 
     if (moduleSchemas.length === 0) {
         skippedSchemas.push(relativeSchemaFile);
         continue;
     }
 
-    generatedSchemas.push(...moduleSchemas);
+    loadedModels.push(...moduleSchemas);
+}
+
+try {
+    const snapshot = compileSchema({
+        models: loadedModels.map((model) => defineModel({
+            name: model.entityName,
+            schema: model.schema
+        }))
+    });
+    const compiledModels = Object.values(snapshot.models);
+    const ddlContext = { overwrite: true, implicitFullTextIndexes: [] };
+
+    for (const model of loadedModels) {
+        const compiledModel = snapshot.models[model.entityName];
+        if (!compiledModel) {
+            failedSchemas.push(`${model.entityName}: compiled model was not found in the generated snapshot.`);
+            continue;
+        }
+
+        generatedSchemas.push({
+            entityName: model.entityName,
+            fileName: `${model.tableName}.surql`,
+            tableName: model.tableName,
+            statements: [
+                ...compiledModel.analyzers.map((analyzer) => compileDefineAnalyzerStatement(analyzer, ddlContext)),
+                compileDefineTableStatement(compiledModel, ddlContext),
+                ...Object.values(compiledModel.fields).flatMap((field) => compileDefineFieldAndIndexStatements(compiledModel, field, compiledModels, ddlContext)),
+                ...compiledModel.indexes.map((index) => compileDefineTableIndexStatement(compiledModel, index, ddlContext))
+            ]
+        });
+    }
+} catch (error) {
+    failedSchemas.push(`schema compilation: ${formatError(error)}`);
 }
 
 await mkdir(outputDirectory, { recursive: true });
@@ -77,26 +132,15 @@ async function findEntitySchemaFiles(directory: string): Promise<string[]> {
     return files.flat().sort((left, right) => left.localeCompare(right));
 }
 
-function compileStorageSchema(exportName: string, schema: z.ZodObject): GeneratedSchema[] {
+function loadStorageSchema(exportName: string, schema: z.ZodObject): LoadedSchemaModel[] {
     const tableMetadata = getTableMetadata(schema);
     if (!tableMetadata) {
         return [];
     }
 
-    const entityName = exportName.replace(/StorageSchema$/, '');
-    const snapshot = compileSchema({
-        models: [
-            defineModel({
-                name: entityName,
-                schema
-            })
-        ]
-    });
-
     return [{
-        entityName,
-        fileName: `${tableMetadata.table}.surql`,
-        statements: compileDefineStatements(snapshot, { overwrite: true }),
+        entityName: exportName.replace(/StorageSchema$/, ''),
+        schema,
         tableName: tableMetadata.table
     }];
 }

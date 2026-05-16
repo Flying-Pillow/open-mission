@@ -3,6 +3,7 @@ import { Task } from './Task.js';
 import {
     taskEntityName,
     TaskLocatorSchema,
+    TaskInstanceInputSchema,
     TaskConfigureInputSchema,
     TaskStartInputSchema,
     TaskCancelInputSchema,
@@ -65,7 +66,7 @@ export const TaskContract: EntityContractType = {
         },
         complete: {
             kind: 'mutation',
-            payload: TaskLocatorSchema,
+            payload: TaskInstanceInputSchema,
             result: TaskCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -80,7 +81,7 @@ export const TaskContract: EntityContractType = {
         },
         reopen: {
             kind: 'mutation',
-            payload: TaskLocatorSchema,
+            payload: TaskInstanceInputSchema,
             result: TaskCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -117,7 +118,7 @@ export const TaskContract: EntityContractType = {
         },
         reworkFromVerification: {
             kind: 'mutation',
-            payload: TaskLocatorSchema,
+            payload: TaskInstanceInputSchema,
             result: TaskCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -132,7 +133,7 @@ export const TaskContract: EntityContractType = {
         },
         enableAutostart: {
             kind: 'mutation',
-            payload: TaskLocatorSchema,
+            payload: TaskInstanceInputSchema,
             result: TaskCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -143,7 +144,7 @@ export const TaskContract: EntityContractType = {
         },
         disableAutostart: {
             kind: 'mutation',
-            payload: TaskLocatorSchema,
+            payload: TaskInstanceInputSchema,
             result: TaskCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {

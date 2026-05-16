@@ -1,0 +1,12 @@
+DEFINE TABLE OVERWRITE agent TYPE NORMAL SCHEMAFULL COMMENT "Canonical Agent catalogue records.";
+DEFINE FIELD OVERWRITE agentId ON TABLE agent TYPE string COMMENT "Stable configured AgentAdapter id used for settings, registry lookup, and launch selection.";
+DEFINE FIELD OVERWRITE availability ON TABLE agent TYPE object COMMENT "Current availability report for this Agent.";
+DEFINE FIELD OVERWRITE capabilities ON TABLE agent TYPE object COMMENT "Provider-neutral capability summary for this Agent.";
+DEFINE FIELD OVERWRITE diagnostics ON TABLE agent TYPE option<object> COMMENT "Optional adapter diagnostic summary for this Agent.";
+DEFINE FIELD OVERWRITE diagnostics.command ON TABLE agent TYPE string COMMENT "Executable command used by the AgentAdapter.";
+DEFINE FIELD OVERWRITE diagnostics.supportedMessageCount ON TABLE agent TYPE int COMMENT "Number of structured AgentExecution message descriptors advertised by the adapter.";
+DEFINE FIELD OVERWRITE diagnostics.supportsUsageParsing ON TABLE agent TYPE bool COMMENT "Whether the AgentAdapter can parse provider usage metadata.";
+DEFINE FIELD OVERWRITE diagnostics.transportCapabilities ON TABLE agent TYPE object COMMENT "Transport and provisioning capabilities reported by the AgentAdapter.";
+DEFINE FIELD OVERWRITE displayName ON TABLE agent TYPE string COMMENT "Operator-facing Agent name shown in catalogue and command surfaces.";
+DEFINE FIELD OVERWRITE icon ON TABLE agent TYPE string COMMENT "Icon identifier shown for the Agent in operator-facing surfaces.";
+DEFINE INDEX OVERWRITE agent_agent_id_idx ON TABLE agent FIELDS agentId UNIQUE;

@@ -1,5 +1,9 @@
 // /apps/web/src/lib/server/daemon/daemon-gateway.ts: Daemon-backed gateway for mission runtime, terminal, and document operations.
 import type { Notification } from '@flying-pillow/open-mission-core/daemon/protocol/contracts';
+import {
+    ImpeccableLiveSessionSchema,
+    type ImpeccableLiveSessionType
+} from '@flying-pillow/open-mission-core/daemon/impeccable/ImpeccableLiveSession';
 import type { SystemState } from '@flying-pillow/open-mission-core/entities/System/SystemSchema';
 import {
     createAllRuntimeEventSubscriptionChannels,
@@ -42,6 +46,41 @@ export class DaemonGateway {
                 ...(this.locals ? { locals: this.locals } : {}),
             }),
         };
+    }
+
+    public async resolveImpeccableLiveSession(input: {
+        repositoryId?: string;
+        missionId?: string;
+    } = {}): Promise<ImpeccableLiveSessionType> {
+        return this.withSharedClient(undefined, async (daemon) => ImpeccableLiveSessionSchema.parse(
+            await withTimeout(
+                daemon.client.request('impeccable-live.resolve', {
+                    ...(input.repositoryId?.trim() ? { repositoryId: input.repositoryId.trim() } : {}),
+                    ...(input.missionId?.trim() ? { missionId: input.missionId.trim() } : {})
+                }),
+                15_000,
+                'Impeccable live session startup timed out.'
+            )
+        ));
+    }
+
+    public async stopImpeccableLiveSession(input: {
+        repositoryId?: string;
+        missionId?: string;
+    } = {}): Promise<{ stopped: boolean }> {
+        return this.withSharedClient(undefined, async (daemon) => {
+            const result = await withTimeout(
+                daemon.client.request<{ stopped: boolean }>('impeccable-live.stop', {
+                    ...(input.repositoryId?.trim() ? { repositoryId: input.repositoryId.trim() } : {}),
+                    ...(input.missionId?.trim() ? { missionId: input.missionId.trim() } : {})
+                }),
+                10_000,
+                'Impeccable live session stop timed out.'
+            );
+            return {
+                stopped: result?.stopped === true
+            };
+        });
     }
 
     public async openEventSubscription(input: {

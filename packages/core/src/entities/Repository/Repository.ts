@@ -6,9 +6,8 @@ import * as path from 'node:path';
 import { createEntityIdentitySegment, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityClassCommandViewType, type EntityCommandViewType } from '../Entity/EntitySchema.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
-import { getDefaultAgentExecutionRegistry } from '../../daemon/runtime/agent-execution/AgentExecutionRegistry.js';
 import type { AgentExecutionType } from '../AgentExecution/AgentExecutionSchema.js';
-import type { Mission, MissionWorkflowBindings } from '../Mission/Mission.js';
+import { Mission } from '../Mission/Mission.js';
 import {
 	getDefaultOpenMissionConfig,
 	getOpenMissionGitHubCliBinary,
@@ -21,7 +20,7 @@ import { refreshSystemStatus } from '../System/SystemStatus.js';
 import type { MissionBrief, MissionDescriptor } from '../Mission/MissionSchema.js';
 import { resolveGitWorkspaceRoot } from '../../platforms/git/GitWorkspace.js';
 import {
-	RepositoryDataSchema,
+	RepositorySchema,
 	RepositoryStorageSchema,
 	RepositoryInputSchema,
 	repositoryEntityName,
@@ -31,7 +30,7 @@ import {
 	TrackedIssueSummarySchema,
 	type RepositoryPlatformOwnerType,
 	type RepositoryPlatformRepositoryType,
-	type RepositoryDataType,
+	type RepositoryType,
 	type RepositoryStorageType,
 	type RepositoryInputType,
 	type RepositoryIssueDetailType,
@@ -43,10 +42,10 @@ import {
 	type RepositoryEnsureSystemAgentExecutionType,
 	type RepositoryClassCommandsType,
 	type RepositoryGetIssueType,
-	type RepositoryLocatorType,
+	type RepositoryInstanceInputType,
 	type RepositoryReadRemovalSummaryType,
-	type RepositoryReadCodeIntelligenceIndexType,
-	type RepositoryCodeIntelligenceIndexType,
+	type RepositoryReadCodeGraphSnapshotType,
+	type RepositoryCodeGraphSnapshotType,
 	type RepositoryAddType,
 	type RepositoryCreateType,
 	type RepositoryRemoveAcknowledgementType,
@@ -62,7 +61,6 @@ import {
 	type RepositorySyncStatusType,
 	type RepositoryRemovalSummaryType,
 	type RepositoryRemovalSummaryMissionType,
-	type RepositoryPreparationStatusType,
 	type RepositorySettingsType,
 	type RepositoryInvalidStateType,
 	type RepositoryStartMissionFromBriefType,
@@ -75,9 +73,10 @@ import {
 	RepositoryEnsureSystemAgentExecutionSchema,
 	RepositoryClassCommandsSchema,
 	RepositoryGetIssueSchema,
+	RepositoryInstanceInputSchema,
 	RepositoryLocatorSchema,
-	RepositoryCodeIntelligenceIndexSchema,
-	RepositoryReadCodeIntelligenceIndexSchema,
+	RepositoryCodeGraphSnapshotSchema,
+	RepositoryReadCodeGraphSnapshotSchema,
 	RepositoryReadRemovalSummarySchema,
 	RepositoryMissionStartAcknowledgementSchema,
 	RepositoryAddSchema,
@@ -116,6 +115,69 @@ export type RepositoryIdentity = {
 	platformRepositoryRef?: string;
 };
 
+type RepositoryCodeIntelligenceService = {
+	ensureIndex(input: { rootPath: string }): Promise<unknown>;
+	readActiveIndex?(input: { rootPath: string }): Promise<unknown>;
+};
+
+type RepositoryAgentExecutionRegistry = {
+	ensureExecution(input: {
+		ownerKey: string;
+		agentRegistry: AgentRegistry;
+		config: Record<string, unknown>;
+	}): Promise<AgentExecutionType>;
+	replaceActiveExecution?(input: {
+		ownerKey: string;
+		agentRegistry: AgentRegistry;
+		config: Record<string, unknown>;
+	}): Promise<AgentExecutionType>;
+	readReusableExecution?(input: {
+		ownerKey: string;
+		requestedAgentId?: string;
+	}): AgentExecutionType | undefined;
+};
+
+function readContextCapability<T>(
+	context: EntityExecutionContext | undefined,
+	capability: string
+): T | undefined {
+	return context?.[capability] as T | undefined;
+}
+
+function readAgentExecutionRegistry(context?: EntityExecutionContext): RepositoryAgentExecutionRegistry | undefined {
+	const capability = readContextCapability<RepositoryAgentExecutionRegistry>(context, 'agentExecutionRegistry');
+	return capability && typeof capability.ensureExecution === 'function'
+		? capability
+		: undefined;
+}
+
+function requireAgentExecutionRegistry(
+	context: EntityExecutionContext | undefined,
+	operation: string
+): RepositoryAgentExecutionRegistry {
+	const registry = readAgentExecutionRegistry(context);
+	if (!registry) {
+		throw new Error(`Repository ${operation} requires an agentExecutionRegistry capability in the Entity execution context.`);
+	}
+	return registry;
+}
+
+function readCodeIntelligenceService(context?: EntityExecutionContext): RepositoryCodeIntelligenceService | undefined {
+	const capability = readContextCapability<RepositoryCodeIntelligenceService>(context, 'codeIntelligenceService');
+	return capability && typeof capability.ensureIndex === 'function' ? capability : undefined;
+}
+
+function requireCodeIntelligenceService(
+	context: EntityExecutionContext | undefined,
+	operation: string
+): RepositoryCodeIntelligenceService {
+	const service = readCodeIntelligenceService(context);
+	if (!service) {
+		throw new Error(`Repository ${operation} requires a codeIntelligenceService capability in the Entity execution context.`);
+	}
+	return service;
+}
+
 function resolveWorkflowCurrentStage(document: WorkflowStateData): string {
 	return (
 		document.runtime.activeStageId
@@ -145,13 +207,11 @@ type RepositoryWorkflowDefinitionState =
 	| { kind: 'invalid'; workflowPath: string; invalidState: RepositoryInvalidStateType };
 
 type RepositoryCodeIndexReadModel = {
-	snapshot: {
-		id: string;
-		indexedAt: string;
-		fileCount: number;
-		symbolCount: number;
-		relationCount: number;
-	};
+	id: string;
+	indexedAt: string;
+	fileCount: number;
+	symbolCount: number;
+	relationCount: number;
 };
 
 type RepositorySettingsDocumentReadOptions = {
@@ -159,8 +219,9 @@ type RepositorySettingsDocumentReadOptions = {
 	invalidDocument?: 'throw' | 'missing';
 };
 
-export class Repository extends Entity<RepositoryDataType, string> {
+export class Repository extends Entity<RepositoryType, string> {
 	public static override readonly entityName = repositoryEntityName;
+	public static readonly storageSchema = RepositoryStorageSchema;
 	public static readonly missionDirectoryName = '.open-mission';
 	public static readonly defaultMissionsRoot = 'missions';
 	public static readonly missionWorkflowDirectoryName = 'workflow';
@@ -168,23 +229,11 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	public static async find(
 		input: RepositoryFindType = {},
-		_context?: EntityExecutionContext
-	): Promise<RepositoryDataType[]> {
-		RepositoryFindSchema.parse(input);
-		const repositoriesById = new Map<string, Repository>();
-
-		for (const repository of await Repository.discoverConfiguredRepositories()) {
-			repositoriesById.set(repository.id, repository);
-		}
-
-		return await Promise.all(
-			[...repositoriesById.values()].map((repository) =>
-				repository.read({
-					id: repository.id,
-					repositoryRootPath: repository.repositoryRootPath
-				})
-			)
-		);
+		context?: EntityExecutionContext
+	): Promise<RepositoryType[]> {
+		const args = RepositoryFindSchema.parse(input);
+		const result = await Repository._find(context, args.select ?? {});
+		return await Promise.all(result.entities.map((repository) => repository.read({})));
 	}
 
 	public static async findAvailable(
@@ -248,12 +297,13 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		if (!agentId) {
 			throw new Error('No repository manager agent is available for the repositories surface.');
 		}
-		const agentExecutionRegistry = context?.agentExecutionRegistry ?? getDefaultAgentExecutionRegistry();
+		const agentExecutionRegistry = requireAgentExecutionRegistry(context, 'ensureSystemAgentExecution');
 		return await agentExecutionRegistry.ensureExecution({
 			ownerKey: Repository.createSystemAgentExecutionOwnerKey(repositoriesRootPath),
 			agentRegistry,
 			config: {
 				ownerId: Repository.createSystemAgentExecutionOwnerKey(repositoriesRootPath),
+				scope: { kind: 'system' },
 				workingDirectory: repositoriesRootPath,
 				specification: {
 					summary: 'Manage the repositories surface for Open Mission.',
@@ -335,7 +385,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return true;
 	}
 
-	private static async discoverConfiguredRepositories(): Promise<Repository[]> {
+	public static async discoverConfiguredRepositories(): Promise<Repository[]> {
 		const config = readOpenMissionConfig();
 		if (!config) {
 			return [];
@@ -412,42 +462,30 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	public static async add(
 		input: RepositoryAddType,
 		context?: EntityExecutionContext
-	): Promise<RepositoryDataType> {
+	): Promise<RepositoryType> {
 		const args = RepositoryAddSchema.parse(input);
 		const repositoryRootPath = 'repositoryRef' in args
 			? await Repository.checkoutPlatformRepositoryAfterDuplicateCheck(args, context)
 			: args.repositoryPath;
 		const repository = await Repository.addLocalRepository(repositoryRootPath, context);
-		await repository.initialize({
-			id: repository.id,
-			repositoryRootPath: repository.repositoryRootPath
-		}, context);
+		await repository.initialize({}, context);
 		await Repository.getRepositoryFactory(context).save(Repository, repository.toStorage());
-		return await repository.read({
-			id: repository.id,
-			repositoryRootPath: repository.repositoryRootPath
-		});
+		return await repository.read({});
 	}
 
 	public static async createPlatformRepository(
 		input: RepositoryCreateType,
 		context?: EntityExecutionContext
-	): Promise<RepositoryDataType> {
+	): Promise<RepositoryType> {
 		const args = RepositoryCreateSchema.parse(input);
 		const repositoryRef = `${args.ownerLogin}/${args.repositoryName}`;
 		await Repository.assertPlatformRepositoryIsNotRegistered(repositoryRef, context);
 		const repositoryRootPath = await Repository.createPlatformRepositoryAfterDuplicateCheck(args, context);
 		const repository = await Repository.addLocalRepository(repositoryRootPath, context);
-		await repository.initialize({
-			id: repository.id,
-			repositoryRootPath: repository.repositoryRootPath
-		}, context);
+		await repository.initialize({}, context);
 		await Repository.syncPreparedRepositorySetupToDefaultBranch(repository.repositoryRootPath);
 		await Repository.getRepositoryFactory(context).save(Repository, repository.toStorage());
-		return await repository.read({
-			id: repository.id,
-			repositoryRootPath: repository.repositoryRootPath
-		});
+		return await repository.read({});
 	}
 
 	public static async resolve(input: unknown, context?: EntityExecutionContext): Promise<Repository> {
@@ -579,7 +617,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 				.split('/')
 				.map((segment) => segment.trim())
 				.filter((segment) => segment.length > 0);
-			if (owner && repository) {
+			if (scope && repository) {
 				return path.join(
 					Repository.resolveMissionsRoot(options.missionsRoot),
 					scope,
@@ -944,8 +982,18 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return new MissionDossierFilesystem(repositoryRootPath).isGitRepository();
 	}
 
-	public constructor(data: RepositoryStorageType) {
-		super(RepositoryDataSchema.parse(data));
+	private static readCheckoutState(repositoryRootPath: string): 'checked-out' | 'not-found' {
+		return Repository.isLiveRepositoryRoot(repositoryRootPath)
+			? 'checked-out'
+			: 'not-found';
+	}
+
+	public constructor(data: RepositoryStorageType | RepositoryType) {
+		const defaults = createDefaultRepositoryConfiguration();
+		super(RepositorySchema.parse({
+			...defaults,
+			...data
+		}));
 	}
 
 	public get id(): string {
@@ -985,7 +1033,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public updateSettings(settings: RepositorySettingsType): this {
-		this.data = RepositoryDataSchema.parse({
+		this.data = RepositorySchema.parse({
 			...this.data,
 			settings: RepositorySettingsSchema.parse(settings)
 		});
@@ -993,7 +1041,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public updateWorkflowConfiguration(workflowConfiguration: WorkflowDefinition): this {
-		this.data = RepositoryDataSchema.parse({
+		this.data = RepositorySchema.parse({
 			...this.data,
 			workflowConfiguration: RepositoryWorkflowConfigurationSchema.parse(workflowConfiguration)
 		});
@@ -1001,7 +1049,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public markInitialized(value = true): this {
-		this.data = RepositoryDataSchema.parse({
+		this.data = RepositorySchema.parse({
 			...this.data,
 			isInitialized: value
 		});
@@ -1010,6 +1058,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	public toStorage(): RepositoryStorageType {
 		const {
+			settings: _settings,
+			workflowConfiguration: _workflowConfiguration,
+			isInitialized: _isInitialized,
+			checkoutState: _checkoutState,
 			operationalMode: _operationalMode,
 			invalidState: _invalidState,
 			currentBranch: _currentBranch,
@@ -1074,8 +1126,8 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		input: RepositoryInitializeType,
 		context?: EntityExecutionContext
 	): Promise<RepositoryInitializeResultType> {
-		const args = RepositoryInitializeSchema.parse(input);
-		this.assertRepositoryIdentity(args);
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInitializeSchema.parse(Repository.stripRepositoryTarget(input));
 		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		if (settingsState.kind === 'invalid') {
 			return RepositoryInitializeResultSchema.parse({
@@ -1091,7 +1143,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 		if (settingsState.kind === 'valid') {
 			this.updateSettings(settingsState.settings);
-			await Repository.tryEnsurePreparedCodeIndex(this.repositoryRootPath, context);
+			await Repository.tryEnsurePreparedCodeIndex(this.repositoryRootPath, context, this.id);
 			return RepositoryInitializeResultSchema.parse({
 				ok: true,
 				entity: repositoryEntityName,
@@ -1107,7 +1159,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const settings = await Repository.createPreparedRepositorySettings(this.repositoryRootPath);
 		await Repository.writeSettingsDocument(settings, this.repositoryRootPath, { resolveWorkspaceRoot: false });
 		this.updateSettings(settings).markInitialized(false);
-		await Repository.tryEnsurePreparedCodeIndex(this.repositoryRootPath, context);
+		await Repository.tryEnsurePreparedCodeIndex(this.repositoryRootPath, context, this.id);
 		return RepositoryInitializeResultSchema.parse({
 			ok: true,
 			entity: repositoryEntityName,
@@ -1123,16 +1175,16 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	public async configureAgents(
 		input: RepositoryConfigureAgentsType,
 		context?: EntityExecutionContext
-	): Promise<RepositoryDataType> {
+	): Promise<RepositoryType> {
 		return this.configureAgent(RepositoryConfigureAgentsSchema.parse(input), context);
 	}
 
 	public async configureAgent(
 		input: RepositoryConfigureAgentType,
 		context?: EntityExecutionContext
-	): Promise<RepositoryDataType> {
-		const args = RepositoryConfigureAgentSchema.parse(input);
-		this.assertRepositoryIdentity(args);
+	): Promise<RepositoryType> {
+		this.assertRepositoryIdentityIfPresent(input);
+		const args = RepositoryConfigureAgentSchema.parse(Repository.stripRepositoryTarget(input));
 
 		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		if (settingsState.kind === 'invalid') {
@@ -1180,18 +1232,15 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		if (currentSettings.agentAdapter !== nextSettings.agentAdapter) {
 			await this.replaceActiveRepositoryAgentExecution(nextSettings, context);
 		}
-		return await this.read({
-			id: this.id,
-			repositoryRootPath: this.repositoryRootPath
-		});
+		return await this.read({});
 	}
 
 	public async configureDisplay(
 		input: RepositoryConfigureDisplayType,
 		context?: EntityExecutionContext
-	): Promise<RepositoryDataType> {
-		const args = RepositoryConfigureDisplaySchema.parse(input);
-		this.assertRepositoryIdentity(args);
+	): Promise<RepositoryType> {
+		this.assertRepositoryIdentityIfPresent(input);
+		const args = RepositoryConfigureDisplaySchema.parse(Repository.stripRepositoryTarget(input));
 
 		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		if (settingsState.kind === 'invalid') {
@@ -1209,18 +1258,15 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		await Repository.writeSettingsDocument(nextSettings, this.repositoryRootPath, { resolveWorkspaceRoot: false });
 		this.updateSettings(nextSettings);
 		await Repository.getRepositoryFactory(context).save(Repository, this.toStorage());
-		return await this.read({
-			id: this.id,
-			repositoryRootPath: this.repositoryRootPath
-		});
+		return await this.read({});
 	}
 
 	public async ensureRepositoryAgentExecution(
 		input: RepositoryInitializeType,
 		context?: EntityExecutionContext
 	): Promise<AgentExecutionType> {
-		const args = RepositoryInitializeSchema.parse(input);
-		this.assertRepositoryIdentity(args);
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInitializeSchema.parse(Repository.stripRepositoryTarget(input));
 		this.assertCanLaunchRepositoryAgentExecution();
 		await this.ensurePreparedForRepositoryAgentExecution(context);
 
@@ -1243,7 +1289,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		if (!agentId) {
 			throw new Error(`Repository '${this.id}' does not have an available repository agent.`);
 		}
-		const agentExecutionRegistry = context?.agentExecutionRegistry ?? getDefaultAgentExecutionRegistry();
+		const agentExecutionRegistry = requireAgentExecutionRegistry(context, 'ensureRepositoryAgentExecution');
 		const ownerKey = Repository.createRepositoryAgentExecutionOwnerKey(this.repositoryRootPath);
 		const reusableExecution = typeof agentExecutionRegistry.readReusableExecution === 'function'
 			? agentExecutionRegistry.readReusableExecution({
@@ -1260,6 +1306,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			agentRegistry,
 			config: {
 				ownerId: ownerKey,
+				scope: {
+					kind: 'repository',
+					repositoryRootPath: this.repositoryRootPath
+				},
 				workingDirectory: this.repositoryRootPath,
 				specification: {
 					summary: `Manage repository ${this.platformRepositoryRef ?? this.repoName}.`,
@@ -1279,8 +1329,8 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		input: RepositoryInitializeType,
 		context?: EntityExecutionContext
 	): Promise<AgentExecutionType> {
-		const args = RepositoryInitializeSchema.parse(input);
-		this.assertRepositoryIdentity(args);
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInitializeSchema.parse(Repository.stripRepositoryTarget(input));
 		this.assertCanLaunchRepositoryAgentExecution();
 		await this.ensurePreparedForRepositoryAgentExecution(context);
 
@@ -1293,31 +1343,32 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			return replacedExecution;
 		}
 
-		return this.ensureRepositoryAgentExecution(args, context);
+		return this.ensureRepositoryAgentExecution({}, context);
 	}
 
 	public async indexCode(
-		input: RepositoryLocatorType,
+		input: RepositoryInstanceInputType,
 		context?: EntityExecutionContext
 	): Promise<RepositoryCodeIndexAcknowledgementType> {
-		const args = RepositoryLocatorSchema.parse(input);
-		this.assertRepositoryIdentity(args);
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInstanceInputSchema.parse(Repository.stripRepositoryTarget(input));
 		const availability = this.canIndexCode();
 		if (!availability.available) {
 			throw new Error(availability.reason ?? 'Repository code indexing is unavailable.');
 		}
 
-		const index = await Repository.ensurePreparedCodeIndex(this.repositoryRootPath, context);
+		const index = await Repository.ensurePreparedCodeIndex(this.repositoryRootPath, context, this.id);
+		const snapshot = index;
 		return RepositoryCodeIndexAcknowledgementSchema.parse({
 			ok: true,
 			entity: repositoryEntityName,
 			method: 'indexCode',
 			id: this.id,
-			snapshotId: index.snapshot.id,
-			indexedAt: index.snapshot.indexedAt,
-			fileCount: index.snapshot.fileCount,
-			symbolCount: index.snapshot.symbolCount,
-			relationCount: index.snapshot.relationCount
+			snapshotId: snapshot.id,
+			indexedAt: snapshot.indexedAt,
+			fileCount: snapshot.fileCount,
+			symbolCount: snapshot.symbolCount,
+			relationCount: snapshot.relationCount
 		});
 	}
 
@@ -1341,13 +1392,20 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			return undefined;
 		}
 
-		const agentExecutionRegistry = context?.agentExecutionRegistry ?? getDefaultAgentExecutionRegistry();
+		const agentExecutionRegistry = requireAgentExecutionRegistry(context, 'refreshRepositoryAgentExecution');
+		if (typeof agentExecutionRegistry.replaceActiveExecution !== 'function') {
+			throw new Error('Repository refreshRepositoryAgentExecution requires replaceActiveExecution support in the agentExecutionRegistry capability.');
+		}
 		const initialPromptText = await this.buildRepositoryAgentPrompt(context);
 		return await agentExecutionRegistry.replaceActiveExecution({
 			ownerKey: Repository.createRepositoryAgentExecutionOwnerKey(this.repositoryRootPath),
 			agentRegistry,
 			config: {
 				ownerId: Repository.createRepositoryAgentExecutionOwnerKey(this.repositoryRootPath),
+				scope: {
+					kind: 'repository',
+					repositoryRootPath: this.repositoryRootPath
+				},
 				workingDirectory: this.repositoryRootPath,
 				specification: {
 					summary: `Manage repository ${this.platformRepositoryRef ?? this.repoName}.`,
@@ -1401,8 +1459,8 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		input: RepositorySetupType,
 		context?: EntityExecutionContext
 	): Promise<RepositorySetupResultType> {
-		const args = RepositorySetupSchema.parse(input);
-		this.assertRepositoryIdentity(args);
+		this.assertRepositoryIdentityIfPresent(input);
+		const args = RepositorySetupSchema.parse(Repository.stripRepositoryTarget(input));
 		const platformRepositoryRef = this.platformRepositoryRef?.trim();
 		if (!platformRepositoryRef) {
 			throw new Error(`Repository '${this.id}' does not have a platform repository ref configured.`);
@@ -1447,7 +1505,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 				? Repository.tryPullSetupBaseBranch(platform, baseBranch)
 				: { pulled: false };
 			if (autoMerge.merged) {
-				await Repository.tryEnsurePreparedCodeIndex(this.repositoryRootPath, context);
+				await Repository.tryEnsurePreparedCodeIndex(this.repositoryRootPath, context, this.id);
 			}
 			refreshSystemStatus({ cwd: proposalWorktreePath });
 
@@ -1478,10 +1536,11 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	private static async tryEnsurePreparedCodeIndex(
 		repositoryRootPath: string,
-		context?: EntityExecutionContext
+		context?: EntityExecutionContext,
+		repositoryId?: string
 	): Promise<void> {
 		try {
-			await Repository.ensurePreparedCodeIndex(repositoryRootPath, context);
+			await Repository.ensurePreparedCodeIndex(repositoryRootPath, context, repositoryId);
 		} catch {
 			// Code intelligence is derived read material; repository preparation must not fail because indexing is unavailable.
 		}
@@ -1489,47 +1548,57 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	private static async ensurePreparedCodeIndex(
 		repositoryRootPath: string,
-		context?: EntityExecutionContext
+		context?: EntityExecutionContext,
+		repositoryId?: string
 	): Promise<RepositoryCodeIndexReadModel> {
-		const service = context?.codeIntelligenceService
-			?? new (await import('../../daemon/runtime/code-intelligence/CodeIntelligenceService.js')).CodeIntelligenceService();
-		return Repository.parseCodeIndexReadModel(await service.ensureIndex({ rootPath: repositoryRootPath }));
+		const service = requireCodeIntelligenceService(context, 'ensurePreparedCodeIndex');
+		return Repository.parseCodeIndexReadModel(await service.ensureIndex({
+			repositoryId: repositoryId ?? Repository.deriveIdentity(repositoryRootPath).id,
+			rootPath: repositoryRootPath
+		}));
 	}
 
 	private static parseCodeIndexReadModel(input: unknown): RepositoryCodeIndexReadModel {
-		if (!input || typeof input !== 'object' || !('snapshot' in input)) {
+		if (!input || typeof input !== 'object') {
 			throw new Error('Code intelligence service did not return an index snapshot.');
 		}
-		const snapshot = (input as { snapshot?: unknown }).snapshot;
-		if (!snapshot || typeof snapshot !== 'object') {
-			throw new Error('Code intelligence service did not return an index snapshot.');
-		}
-		const record = snapshot as Record<string, unknown>;
+		const record = input as Record<string, unknown>;
 		if (typeof record['id'] !== 'string' || typeof record['indexedAt'] !== 'string') {
 			throw new Error('Code intelligence service returned an invalid index snapshot identity.');
 		}
-		for (const fieldName of ['fileCount', 'symbolCount', 'relationCount']) {
-			if (typeof record[fieldName] !== 'number') {
-				throw new Error(`Code intelligence service returned an invalid '${fieldName}' count.`);
-			}
+		const objects = Array.isArray(record['objects']) ? record['objects'] : undefined;
+		const relations = Array.isArray(record['relations']) ? record['relations'] : undefined;
+		if (!objects || !relations) {
+			throw new Error('Code intelligence service returned an invalid hydrated graph snapshot.');
+		}
+		const fileCount = objects.filter((object) => {
+			return object && typeof object === 'object'
+				&& ((object as { objectKind?: unknown }).objectKind === 'file'
+					|| (object as { objectKind?: unknown }).objectKind === 'document');
+		}).length;
+		const symbolCount = objects.filter((object) => {
+			return object && typeof object === 'object'
+				&& (object as { objectKind?: unknown }).objectKind === 'symbol';
+		}).length;
+		const relationCount = relations.length;
+		if (typeof fileCount !== 'number' || typeof symbolCount !== 'number' || typeof relationCount !== 'number') {
+			throw new Error('Code intelligence service returned invalid index counts.');
 		}
 		return {
-			snapshot: {
-				id: record['id'],
-				indexedAt: record['indexedAt'],
-				fileCount: record['fileCount'],
-				symbolCount: record['symbolCount'],
-				relationCount: record['relationCount']
-			}
+			id: record['id'],
+			indexedAt: record['indexedAt'],
+			fileCount,
+			symbolCount,
+			relationCount
 		};
 	}
 
 	public override async remove(
-		input: RepositoryLocatorType,
+		input: RepositoryInstanceInputType,
 		context?: EntityExecutionContext
 	): Promise<RepositoryRemoveAcknowledgementType> {
-		const args = RepositoryLocatorSchema.parse(input);
-		this.assertRepositoryIdentity(args);
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInstanceInputSchema.parse(Repository.stripRepositoryTarget(input));
 		const repositoryRootPath = await Repository.assertRemovableRepositoryRoot(this.repositoryRootPath);
 		await Repository.removeMissionWorktreeRoot(repositoryRootPath);
 		await fsp.rm(repositoryRootPath, { recursive: true });
@@ -1592,17 +1661,22 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return parsed.success ? parsed.data : undefined;
 	}
 
-	public async read(input: RepositoryLocatorType): Promise<RepositoryDataType> {
-		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
+	public async read(input: RepositoryInstanceInputType): Promise<RepositoryType> {
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInstanceInputSchema.parse(Repository.stripRepositoryTarget(input));
 		const store = new MissionDossierFilesystem(this.repositoryRootPath);
+		const defaults = createDefaultRepositoryConfiguration();
 		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		const workflowState = Repository.inspectWorkflowDefinition(this.repositoryRootPath);
 		const trackedSetupState = Repository.inspectTrackedRepositorySetupState(store, this.repositoryRootPath);
 		const currentBranch = store.isGitRepository() ? store.getCurrentBranch() : undefined;
+		const checkoutState = Repository.readCheckoutState(this.repositoryRootPath);
 		if (workflowState.kind === 'invalid') {
-			this.data = RepositoryDataSchema.parse({
+			this.data = RepositorySchema.parse({
+				...defaults,
 				...this.toStorage(),
 				...(settingsState.kind === 'valid' ? { settings: settingsState.settings } : {}),
+				checkoutState,
 				operationalMode: 'setup',
 				invalidState: workflowState.invalidState,
 				...(currentBranch ? { currentBranch } : {}),
@@ -1611,8 +1685,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			return this.toData();
 		}
 		if (settingsState.kind === 'invalid') {
-			this.data = RepositoryDataSchema.parse({
+			this.data = RepositorySchema.parse({
+				...defaults,
 				...this.toStorage(),
+				checkoutState,
 				operationalMode: 'setup',
 				...(currentBranch ? { currentBranch } : {}),
 				isInitialized: false
@@ -1624,10 +1700,12 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			&& workflowState.kind === 'valid'
 			&& trackedSetupState.localTracked
 			&& trackedSetupState.remoteTracked;
-		this.data = RepositoryDataSchema.parse({
+		this.data = RepositorySchema.parse({
+			...defaults,
 			...this.toStorage(),
 			...(settingsState.kind === 'valid' ? { settings: settingsState.settings } : {}),
 			...(workflowState.kind === 'valid' ? { workflowConfiguration: workflowState.workflow } : {}),
+			checkoutState,
 			operationalMode: this.isInitialized || hasRepositorySetupState ? 'repository' : 'setup',
 			...(currentBranch ? { currentBranch } : {}),
 			isInitialized: this.isInitialized || hasRepositorySetupState
@@ -1635,13 +1713,15 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return this.toData();
 	}
 
-	public async syncStatus(input: RepositoryLocatorType, context?: EntityExecutionContext): Promise<RepositorySyncStatusType> {
-		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
+	public async syncStatus(input: RepositoryInstanceInputType, context?: EntityExecutionContext): Promise<RepositorySyncStatusType> {
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInstanceInputSchema.parse(Repository.stripRepositoryTarget(input));
 		return RepositorySyncStatusSchema.parse(this.buildSyncStatus(context?.authToken));
 	}
 
 	public async readRemovalSummary(input: RepositoryReadRemovalSummaryType): Promise<RepositoryRemovalSummaryType> {
-		this.assertRepositoryIdentity(RepositoryReadRemovalSummarySchema.parse(input));
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryReadRemovalSummarySchema.parse(Repository.stripRepositoryTarget(input));
 		const store = new MissionDossierFilesystem(this.repositoryRootPath);
 		const missionWorktreesPath = store.getMissionsPath();
 		const missions = await store.listMissions().catch(() => []);
@@ -1667,24 +1747,27 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		});
 	}
 
-	public async readCodeIntelligenceIndex(
-		input: RepositoryReadCodeIntelligenceIndexType,
+	public async readCodeGraphSnapshot(
+		input: RepositoryReadCodeGraphSnapshotType,
 		context?: EntityExecutionContext
-	): Promise<RepositoryCodeIntelligenceIndexType> {
-		this.assertRepositoryIdentity(RepositoryReadCodeIntelligenceIndexSchema.parse(input));
-		const service = context?.codeIntelligenceService?.readActiveIndex
-			? context.codeIntelligenceService
-			: new (await import('../../daemon/runtime/code-intelligence/CodeIntelligenceService.js')).CodeIntelligenceService();
-		return RepositoryCodeIntelligenceIndexSchema.parse(
-			await service.readActiveIndex?.({ rootPath: this.repositoryRootPath })
+	): Promise<RepositoryCodeGraphSnapshotType> {
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryReadCodeGraphSnapshotSchema.parse(Repository.stripRepositoryTarget(input));
+		const service = readCodeIntelligenceService(context);
+		if (!service?.readActiveIndex) {
+			return RepositoryCodeGraphSnapshotSchema.parse(null);
+		}
+		return RepositoryCodeGraphSnapshotSchema.parse(
+			await service.readActiveIndex({ repositoryId: this.id, rootPath: this.repositoryRootPath })
 		);
 	}
 
 	public async fetchExternalState(
-		input: RepositoryLocatorType,
+		input: RepositoryInstanceInputType,
 		context?: EntityExecutionContext
 	): Promise<RepositorySyncCommandAcknowledgementType> {
-		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInstanceInputSchema.parse(Repository.stripRepositoryTarget(input));
 		this.requireRepositoryPlatformAdapter(context?.authToken).fetchRemote();
 		return RepositorySyncCommandAcknowledgementSchema.parse({
 			ok: true,
@@ -1696,10 +1779,11 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public async fastForwardFromExternal(
-		input: RepositoryLocatorType,
+		input: RepositoryInstanceInputType,
 		context?: EntityExecutionContext
 	): Promise<RepositorySyncCommandAcknowledgementType> {
-		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInstanceInputSchema.parse(Repository.stripRepositoryTarget(input));
 		const adapter = this.requireRepositoryPlatformAdapter(context?.authToken);
 		adapter.fetchRemote();
 		const status = this.buildSyncStatus(context?.authToken);
@@ -1720,26 +1804,31 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		});
 	}
 
-	public async commands(input: RepositoryLocatorType, context?: EntityExecutionContext): Promise<EntityCommandViewType> {
+	public async commands(input: RepositoryInstanceInputType, context?: EntityExecutionContext): Promise<EntityCommandViewType> {
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInstanceInputSchema.parse(Repository.stripRepositoryTarget(input));
 		await this.read(input);
 		const { RepositoryContract } = await import('./RepositoryContract.js');
+		const missionRegistry = readContextCapability<unknown>(context, 'missionRegistry');
+		const missionService = readContextCapability<unknown>(context, 'missionService');
 		return EntityCommandViewSchema.parse({
 			id: this.id,
 			commands: await this.commandDescriptors(RepositoryContract, {
 				surfacePath: this.repositoryRootPath,
 				...(context?.authToken ? { authToken: context.authToken } : {}),
-				...(context?.missionRegistry ? { missionRegistry: context.missionRegistry } : {}),
-				...(context?.missionService ? { missionService: context.missionService } : {}),
+				...(missionRegistry ? { missionRegistry } : {}),
+				...(missionService ? { missionService } : {}),
 				...(context?.entityFactory ? { entityFactory: context.entityFactory } : {})
 			})
 		});
 	}
 
 	public async listIssues(
-		input: RepositoryLocatorType,
+		input: RepositoryInstanceInputType,
 		context?: { authToken?: string }
 	): Promise<TrackedIssueSummaryType[]> {
-		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
+		this.assertRepositoryIdentityIfPresent(input);
+		RepositoryInstanceInputSchema.parse(Repository.stripRepositoryTarget(input));
 		const platform = this.tryCreateRepositoryPlatformAdapter(context?.authToken);
 		return TrackedIssueSummarySchema.array().parse(platform ? await platform.listOpenIssues(25) : []);
 	}
@@ -1748,8 +1837,8 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		input: RepositoryGetIssueType,
 		context?: { authToken?: string }
 	): Promise<RepositoryIssueDetailType> {
-		const args = RepositoryGetIssueSchema.parse(input);
-		this.assertRepositoryIdentity(args);
+		this.assertRepositoryIdentityIfPresent(input);
+		const args = RepositoryGetIssueSchema.parse(Repository.stripRepositoryTarget(input));
 		return RepositoryIssueDetailSchema.parse(
 			await this.requireRepositoryPlatformAdapter(context?.authToken)
 				.fetchIssueDetail(String(args.issueNumber))
@@ -1760,9 +1849,9 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		input: RepositoryStartMissionFromIssueType,
 		context?: { authToken?: string }
 	): Promise<RepositoryMissionStartAcknowledgementType> {
-		const args = RepositoryStartMissionFromIssueSchema.parse(input);
-		this.assertRepositoryIdentity(args);
-		await this.refreshRepositoryControlState(args);
+		this.assertRepositoryIdentityIfPresent(input);
+		const args = RepositoryStartMissionFromIssueSchema.parse(Repository.stripRepositoryTarget(input));
+		await this.refreshRepositoryControlState();
 		this.assertCanStartRegularMission();
 		const brief = await this.requireRepositoryPlatformAdapter(context?.authToken)
 			.fetchIssue(String(args.issueNumber));
@@ -1773,9 +1862,9 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		input: RepositoryStartMissionFromBriefType,
 		context?: { authToken?: string }
 	): Promise<RepositoryMissionStartAcknowledgementType> {
-		const args = RepositoryStartMissionFromBriefSchema.parse(input);
-		this.assertRepositoryIdentity(args);
-		await this.refreshRepositoryControlState(args);
+		this.assertRepositoryIdentityIfPresent(input);
+		const args = RepositoryStartMissionFromBriefSchema.parse(Repository.stripRepositoryTarget(input));
+		await this.refreshRepositoryControlState();
 		this.assertCanStartRegularMission();
 		const platform = this.tryCreateRepositoryPlatformAdapter(context?.authToken);
 		const baseBrief = {
@@ -1831,7 +1920,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	private async ensurePreparedForRepositoryAgentExecution(context?: EntityExecutionContext): Promise<void> {
 		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		if (settingsState.kind !== 'valid') {
-			await this.initialize({ id: this.id, repositoryRootPath: this.repositoryRootPath }, context);
+			await this.initialize({}, context);
 		}
 	}
 
@@ -1852,11 +1941,8 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return `Repository.systemAgentExecution:${repositoriesRootPath}`;
 	}
 
-	private async refreshRepositoryControlState(input: RepositoryLocatorType): Promise<void> {
-		await this.read({
-			id: input.id,
-			...(input.repositoryRootPath ? { repositoryRootPath: input.repositoryRootPath } : {})
-		});
+	private async refreshRepositoryControlState(): Promise<void> {
+		await this.read({});
 	}
 
 	private async prepareMission(
@@ -1871,7 +1957,9 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		}
 		const workflow = parsePersistedWorkflowSettings(workflowDocument);
 		const store = new MissionDossierFilesystem(this.repositoryRootPath);
-		const preparation = await this.prepareMissionFromBrief(store, {
+		const missionId = store.createMissionId(brief);
+		const missionWorktreePath = store.getMissionWorktreePath(missionId);
+		const preparation = await Mission.prepareFromBrief(store, {
 			workflow,
 			agentRegistry: new AgentRegistry({ agents: [] }),
 			...(settings.instructionsPath
@@ -1883,7 +1971,17 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
 			...(settings.defaultReasoningEffort ? { defaultReasoningEffort: settings.defaultReasoningEffort } : {}),
 			...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {})
-		}, { brief });
+		}, {
+			brief,
+			stageRelativePaths: [
+				path.relative(missionWorktreePath, Repository.getSettingsDocumentPath(missionWorktreePath, {
+					resolveWorkspaceRoot: false
+				})),
+				path.relative(missionWorktreePath, path.dirname(Repository.getMissionWorkflowDefinitionPath(missionWorktreePath))),
+				path.relative(missionWorktreePath, store.getTrackedMissionDir(missionId, missionWorktreePath))
+			],
+			commitMessage: Repository.buildMissionPreparationCommitMessage(missionId, brief)
+		});
 
 		if (preparation.kind !== 'mission') {
 			throw new Error('Mission preparation returned an unexpected result.');
@@ -1897,118 +1995,13 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		});
 	}
 
-	private async prepareMissionFromBrief(
-		store: MissionDossierFilesystem,
-		workflowBindings: MissionWorkflowBindings,
-		input: {
-			brief: MissionBrief;
-			branchRef?: string;
-		}
-	): Promise<RepositoryPreparationStatusType> {
-		const missionId = store.createMissionId(input.brief);
-		const canonicalMissionRootDir = store.getTrackedMissionDir(missionId);
-		const branchRef = input.branchRef
-			?? (input.brief.issueId !== undefined
-				? store.deriveMissionBranchName(input.brief.issueId, input.brief.title)
-				: store.deriveDraftMissionBranchName(input.brief.title));
-		const baseBranch = store.getDefaultBranch();
-		const createdAt = new Date().toISOString();
-		const missionWorktreePath = store.getMissionWorktreePath(missionId);
-		let preparedMission: Mission | undefined;
-
-		try {
-			await this.ensureMissionWorktreeOnBranch(store, missionWorktreePath, branchRef, baseBranch);
-
-			const missionWorktreeStore = new MissionDossierFilesystem(missionWorktreePath);
-			const missionRootDir = missionWorktreeStore.getTrackedMissionDir(missionId, missionWorktreePath);
-			const existingDescriptor = await missionWorktreeStore.readMissionDescriptor(missionRootDir);
-			if (existingDescriptor) {
-				await this.assertExistingMissionRuntimeDataValid(missionWorktreeStore, missionRootDir, missionId);
-				return {
-					kind: 'mission',
-					state: 'branch-prepared',
-					missionId,
-					branchRef: existingDescriptor.branchRef,
-					baseBranch,
-					worktreePath: missionWorktreePath,
-					missionRootDir,
-					...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
-					...(input.brief.url ? { issueUrl: input.brief.url } : {})
-				};
-			}
-
-			const descriptor: MissionDescriptor = {
-				missionId,
-				missionDir: missionRootDir,
-				brief: input.brief,
-				branchRef,
-				createdAt
-			};
-
-			const { Mission } = await import('../Mission/Mission.js');
-			const preparedWorkflowBindings = await this.resolveMissionWorkflowBindings(workflowBindings, missionWorktreePath);
-			preparedMission = new Mission(
-				missionWorktreeStore,
-				missionRootDir,
-				descriptor,
-				preparedWorkflowBindings
-			);
-			await preparedMission.initialize();
-			preparedMission.dispose();
-			preparedMission = undefined;
-
-			missionWorktreeStore.stagePaths(
-				[
-					path.relative(missionWorktreePath, Repository.getSettingsDocumentPath(missionWorktreePath, {
-						resolveWorkspaceRoot: false
-					})),
-					path.relative(missionWorktreePath, path.dirname(Repository.getMissionWorkflowDefinitionPath(missionWorktreePath))),
-					path.relative(missionWorktreePath, missionRootDir)
-				],
-				missionWorktreePath,
-				{ force: true }
-			);
-			missionWorktreeStore.commit(Repository.buildMissionPreparationCommitMessage(missionId, input.brief), missionWorktreePath);
-			missionWorktreeStore.pushBranch(branchRef, missionWorktreePath);
-
-			return {
-				kind: 'mission',
-				state: 'branch-prepared',
-				missionId,
-				branchRef,
-				baseBranch,
-				worktreePath: missionWorktreePath,
-				missionRootDir: canonicalMissionRootDir,
-				...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
-				...(input.brief.url ? { issueUrl: input.brief.url } : {})
-			};
-		} finally {
-			preparedMission?.dispose();
-		}
-	}
-
 	private async ensureMissionWorktreeOnBranch(
 		store: MissionDossierFilesystem,
 		missionWorktreePath: string,
 		branchRef: string,
 		baseBranch: string
 	): Promise<void> {
-		if (!fs.existsSync(missionWorktreePath)) {
-			await store.materializeMissionWorktree(missionWorktreePath, branchRef, baseBranch);
-			return;
-		}
-
-		const missionWorktreeStore = new MissionDossierFilesystem(missionWorktreePath);
-		if (!missionWorktreeStore.isGitRepository()) {
-			throw new Error(`Mission worktree root '${missionWorktreePath}' already exists but is not a Git worktree.`);
-		}
-
-		const currentBranch = missionWorktreeStore.getCurrentBranch(missionWorktreePath);
-		if (currentBranch !== branchRef) {
-			throw new Error(
-				`Mission worktree root '${missionWorktreePath}' already exists on branch '${currentBranch}' instead of expected Mission branch '${branchRef}'.`
-			);
-		}
+		await Mission.ensureWorktreeOnBranch(store, missionWorktreePath, branchRef, baseBranch);
 	}
 
 	private async assertExistingMissionRuntimeDataValid(
@@ -2016,32 +2009,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		missionDir: string,
 		missionId: string
 	): Promise<void> {
-		const { Mission } = await import('../Mission/Mission.js');
-		try {
-			const existingData = await Mission.readStateData(adapter, missionDir);
-			if (!existingData) {
-				throw new Error(`Mission runtime data is missing for existing Mission '${missionId}'.`);
-			}
-		} catch (error) {
-			const detail = error instanceof Error ? error.message : String(error);
-			throw new Error(
-				`Mission '${missionId}' already exists at '${missionDir}', but its Mission runtime data is invalid for the current runtime schema. Delete or explicitly recreate the Mission; Mission does not fallback-load or implicitly migrate stale runtime data. ${detail}`
-			);
-		}
-	}
-
-	private async resolveMissionWorkflowBindings(
-		workflowBindings: MissionWorkflowBindings,
-		repositoryRootPath: string
-	): Promise<MissionWorkflowBindings> {
-		if (workflowBindings.agentRegistry.listAgents().length > 0) {
-			return workflowBindings;
-		}
-		const { AgentRegistry } = await import('../Agent/AgentRegistry.js');
-		return {
-			...workflowBindings,
-			agentRegistry: await AgentRegistry.createConfigured({ repositoryRootPath })
-		};
+		await Mission.assertRuntimeDataValid(adapter, missionDir, missionId);
 	}
 
 	private tryCreateRepositoryPlatformAdapter(authToken?: string) {
@@ -2214,7 +2182,32 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		}
 	}
 
-	private static createRepositoryData(input: RepositoryInputType): RepositoryStorageType {
+	private assertRepositoryIdentityIfPresent(input: unknown): void {
+		const inputRecord = Repository.isRecord(input) ? input : undefined;
+		if (!inputRecord) {
+			return;
+		}
+		if (inputRecord['id'] === undefined && inputRecord['repositoryRootPath'] === undefined) {
+			return;
+		}
+		const args = RepositoryLocatorSchema.parse({
+			id: inputRecord['id'],
+			...(typeof inputRecord['repositoryRootPath'] === 'string'
+				? { repositoryRootPath: inputRecord['repositoryRootPath'] }
+				: {})
+		});
+		this.assertRepositoryIdentity(args);
+	}
+
+	private static stripRepositoryTarget(input: unknown): unknown {
+		if (!Repository.isRecord(input)) {
+			return input;
+		}
+		const { id: _id, repositoryRootPath: _repositoryRootPath, ...payload } = input;
+		return payload;
+	}
+
+	private static createRepositoryData(input: RepositoryInputType): RepositoryType {
 		const normalizedRepositoryRootPath = path.resolve(input.repositoryRootPath);
 		const identity = Repository.deriveIdentity(normalizedRepositoryRootPath);
 		const explicitPlatformRepositoryRef = input.platformRepositoryRef?.trim();
@@ -2222,7 +2215,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const { ownerId, repoName } = Repository.deriveRepositoryNames(normalizedRepositoryRootPath, platformRepositoryRef);
 		const defaults = createDefaultRepositoryConfiguration();
 
-		return RepositoryStorageSchema.parse({
+		return RepositorySchema.parse({
 			id: platformRepositoryRef ? Repository.buildGitHubRepositoryId(platformRepositoryRef) : identity.id,
 			repositoryRootPath: normalizedRepositoryRootPath,
 			ownerId,
@@ -2267,7 +2260,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		if (!scope || !repository || rest.length > 0) {
 			return undefined;
 		}
-		return `${owner}/${repository}`;
+		return `${scope}/${repository}`;
 	}
 
 	private static buildLocalRepositoryId(repositoryRootPath: string): string {
@@ -2301,17 +2294,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	private static getRepositoryFactory(context?: EntityExecutionContext) {
-		const factory = Repository.getEntityFactory(context);
-		if (!factory.has(Repository)) {
-			factory.register({
-				entityName: repositoryEntityName,
-				table: 'repository',
-				entityClass: Repository,
-				storageSchema: RepositoryStorageSchema,
-				getId: (record) => record.id
-			});
-		}
-		return factory;
+		return Repository.getEntityFactory(context);
 	}
 }
 

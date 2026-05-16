@@ -15,7 +15,7 @@ The product requirement is:
 ```text
 Agent asks Mission for code context
 Mission answers from a scoped daemon-owned code graph
-Agent work stays tied to Mission scope, runtime facts, and verification
+Agent work stays tied to Mission scope, bounded journal observations, and verification
 ```
 
 This is the Mission-native version of the demand demonstrated by GitNexus: code intelligence belongs next to the Agent workflow, not as a separate manual research loop.
@@ -45,7 +45,7 @@ The first user-visible outcome is an Agent that can call semantic operations suc
 - `route_impact`
 - `tool_context`
 
-The Agent receives structured answers with file paths, line ranges, confidence, staleness, and follow-up affordances. The daemon records bounded runtime facts for audit and future replay.
+The Agent receives structured answers with file paths, line ranges, confidence, staleness, and follow-up affordances. The daemon records bounded AgentExecution journal observations for audit and future replay.
 
 ## Users
 
@@ -95,6 +95,8 @@ Code graph records are derived read material, not Mission Entities. Phase one sh
 
 Start with a universal text-file scanner so any Code root gets file-level index coverage, then add high-signal parser-backed providers by language. TypeScript/JavaScript support for Mission itself is the first deep extraction provider. Regex-only code extraction is not acceptable for the durable indexer path except as a narrow fallback or test fixture. The operation results must report provider capability, confidence, and staleness rather than pretending the graph is omniscient.
 
+For markdown and other non-code text files, baseline indexing should still produce file or document graph nodes. Optional Agent-assisted semantic enrichment for those files may be added later behind the indexer as a provider capability, but it must remain disabled by default and must not be required for baseline indexing.
+
 ### No Hidden Mutation
 
 The baseline tools are read-only. They may guide edits, but they do not edit files, rename symbols, change workflow state, or mark tasks complete.
@@ -109,9 +111,11 @@ The baseline tools are read-only. They may guide edits, but they do not edit fil
 - Let semantic operation calls invoke `ensureIndex` so an Agent can get fresh context even when background indexing has not completed yet.
 - Define code graph tables, relation tables, fields, analyzers, and indexes as Mission-owned Zod schemas annotated with `@flying-pillow/zod-surreal` metadata.
 - Generate deterministic SurrealQL schema/provisioning statements from the zod-surreal model snapshot; do not make hand-written SurQL DDL the source of truth.
-- Track code index snapshots, files, symbols, and relations in phase one.
+- Track code index snapshots plus canonical graph objects and relations in phase one.
 - Index eligible text files even when no semantic extraction provider exists for their language; unknown or unsupported languages still produce Code file records with lower capability.
+- The canonical graph model should distinguish object type explicitly through schema-owned vocabulary such as `objectKind` rather than relying on old table names alone.
 - Keep language support explicit through a Mission-owned provider registry. Adding semantic depth for a language means adding or enabling a provider rather than expanding ad hoc indexer branches.
+- Optional Agent-assisted providers for markdown and other non-code text files may enrich document structure, but they must remain disabled by default and must not block baseline indexing.
 - Defer routes, tools, processes, clusters, test context, and framework-specific intelligence until the structural index and first semantic operations are proven.
 - Record root identity, commit or worktree fingerprint, indexed time, counts, and staleness.
 - Honor repository ignore rules for generated, dependency, and build-output files, always exclude Mission runtime state under `.mission/`, and skip binary, oversized, and sensitive files.
@@ -124,7 +128,7 @@ The baseline tools are read-only. They may guide edits, but they do not edit fil
 - Resolve accessible root from AgentExecution scope.
 - Return structured results rather than prose-only text.
 - Include staleness and confidence in results where relevant.
-- Record bounded runtime facts in the AgentExecution interaction journal.
+- Record bounded daemon-observed observations in the AgentExecution interaction journal.
 
 ### Search And Context
 
@@ -185,7 +189,7 @@ The baseline tools are read-only. They may guide edits, but they do not edit fil
 
 1. Fix `open-mission mcp connect` so it can proxy semantic operations without wrapping them as Agent signals.
 2. Promote `read_artifact` into the same descriptor model that future semantic operations use.
-3. Build the structural code graph for eligible text files in any Code root, with TypeScript/JavaScript as the first parser-backed symbol and relation provider: `CodeIndexSnapshot`, `CodeFile`, `CodeSymbol`, and `CodeRelation`.
+3. Build the structural code graph for eligible text files in any Code root, with TypeScript/JavaScript as the first parser-backed symbol and relation provider and the node-edge model as the canonical persisted shape.
 4. Add daemon-owned `ensureIndex` lifecycle with Code root snapshots.
 5. Add zod-surreal model definitions and generated SurQL provisioning for the code graph store.
 6. Implement `code_search` and `symbol_context` first.

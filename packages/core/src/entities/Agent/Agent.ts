@@ -1,5 +1,4 @@
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
-import type { AgentAdapter } from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
 import {
     agentEntityName,
     AgentAdapterDiagnosticsSchema,
@@ -10,16 +9,39 @@ import {
     AgentLocatorSchema,
     AgentCapabilitySchema,
     type AgentAvailabilityType,
+    type AgentAdapterDiagnosticsType,
     type AgentCapabilityType,
     type AgentConnectionTestResultType,
     type AgentType,
     type AgentIdType
 } from './AgentSchema.js';
+import { Repository } from '../Repository/Repository.js';
+
+export type AgentAdapterHandle = {
+    readonly id: string;
+    readonly displayName: string;
+    readonly icon: string;
+    getCapabilities(): AgentCapabilityType | Promise<AgentCapabilityType>;
+    isAvailable(): { available: boolean; reason?: string } | Promise<{ available: boolean; reason?: string }>;
+    readDiagnostics(): AgentAdapterDiagnosticsType;
+};
+
+export type AgentConnectionTestRunner = {
+    test(input: {
+        agent: Agent;
+        repositoryRootPath: string;
+        workingDirectory: string;
+        model?: string;
+        reasoningEffort?: string;
+        launchMode?: 'interactive' | 'print';
+        initialPrompt?: string;
+    }): Promise<unknown>;
+};
 
 export class Agent extends Entity<AgentType, string> {
     public static override readonly entityName = agentEntityName;
 
-    public constructor(data: AgentType, private readonly adapter?: AgentAdapter) {
+    public constructor(data: AgentType, private readonly adapter?: AgentAdapterHandle) {
         super(AgentSchema.parse(data));
     }
 
@@ -39,7 +61,7 @@ export class Agent extends Entity<AgentType, string> {
         return createEntityId('agent', agentId);
     }
 
-    public static async fromAdapter(adapter: AgentAdapter): Promise<Agent> {
+    public static async fromAdapter(adapter: AgentAdapterHandle): Promise<Agent> {
         const [capabilities, availability] = await Promise.all([
             adapter.getCapabilities(),
             adapter.isAvailable()
@@ -55,33 +77,34 @@ export class Agent extends Entity<AgentType, string> {
         }), adapter);
     }
 
-    public requireAdapter(): AgentAdapter {
+    public requireAdapter<TAdapter extends AgentAdapterHandle = AgentAdapterHandle>(): TAdapter {
         if (!this.adapter) {
             throw new Error(`Agent '${this.agentId}' does not have an attached adapter.`);
         }
-        return this.adapter;
+        return this.adapter as TAdapter;
     }
 
     public static async read(payload: unknown, context: EntityExecutionContext): Promise<AgentType> {
         const input = AgentLocatorSchema.parse(payload);
-        const registry = await loadAgentRegistry(input.repositoryRootPath ?? context.surfacePath);
+        const repositoryRootPath = await resolveRepositoryRootPath(input.repositoryId, context);
+        const registry = await loadAgentRegistry(repositoryRootPath);
         return registry.requireAgent(input.agentId).toData();
     }
 
     public static async find(payload: unknown, context: EntityExecutionContext): Promise<AgentType[]> {
         const input = AgentFindSchema.parse(payload);
-        const registry = await loadAgentRegistry(input.repositoryRootPath ?? context.surfacePath);
+        const repositoryRootPath = await resolveRepositoryRootPath(input.repositoryId, context);
+        const registry = await loadAgentRegistry(repositoryRootPath);
         return registry.listAgents().map((agent) => agent.toData());
     }
 
     public static async testConnection(payload: unknown, context: EntityExecutionContext): Promise<AgentConnectionTestResultType> {
         const input = AgentTestConnectionInputSchema.parse(payload);
-        const repositoryRootPath = input.repositoryRootPath ?? context.surfacePath;
+        const repositoryRootPath = await resolveRepositoryRootPath(input.repositoryId, context);
         const workingDirectory = input.workingDirectory ?? repositoryRootPath;
         const registry = await loadAgentRegistry(repositoryRootPath);
         const agent = registry.requireAgent(input.agentId);
-        const { AgentConnectionTester } = await import('../../daemon/runtime/agent-execution/AgentConnectionTester.js');
-        const tester = new AgentConnectionTester();
+        const tester = requireAgentConnectionTestRunner(context);
         return AgentConnectionTestResultSchema.parse(await tester.test({
             agent,
             repositoryRootPath,
@@ -92,6 +115,23 @@ export class Agent extends Entity<AgentType, string> {
             ...(input.initialPrompt ? { initialPrompt: input.initialPrompt } : {})
         }));
     }
+}
+
+async function resolveRepositoryRootPath(repositoryId: string, context: EntityExecutionContext): Promise<string> {
+    const repository = await Repository.resolve({ id: repositoryId }, context);
+    return repository.repositoryRootPath;
+}
+
+function requireAgentConnectionTestRunner(context: EntityExecutionContext): AgentConnectionTestRunner {
+    const tester = context['agentConnectionTester'];
+    if (!isAgentConnectionTestRunner(tester)) {
+        throw new Error('Agent connection tests require an agentConnectionTester execution-context capability.');
+    }
+    return tester;
+}
+
+function isAgentConnectionTestRunner(input: unknown): input is AgentConnectionTestRunner {
+    return typeof input === 'object' && input !== null && 'test' in input && typeof input.test === 'function';
 }
 
 async function loadAgentRegistry(repositoryRootPath: string) {
@@ -112,7 +152,7 @@ function normalizeAvailability(input: { available: boolean; reason?: string }): 
         };
 }
 
-function cloneDiagnostics(input: ReturnType<AgentAdapter['readDiagnostics']>) {
+function cloneDiagnostics(input: AgentAdapterDiagnosticsType) {
     return AgentAdapterDiagnosticsSchema.parse(input);
 }
 

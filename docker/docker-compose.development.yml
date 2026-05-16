@@ -1,3 +1,8 @@
+x-open-mission-common-environment: &open-mission-common-environment
+  MISSIONS_PATH: /missions
+  OPEN_MISSION_CONFIG_PATH: /config
+  OPEN_MISSION_REPOSITORY_ROOT: /open-mission
+
 services:
   development:
     build:
@@ -13,8 +18,7 @@ services:
     env_file:
       - ../.env
     environment:
-      MISSIONS_PATH: /missions
-      OPEN_MISSION_CONFIG_PATH: /config
+      <<: *open-mission-common-environment
     volumes:
       - "../:/open-mission"
       - "../../flying-pillow:/flying-pillow"
@@ -24,19 +28,75 @@ services:
       - "cargo-registry:/home/dev/.cargo/registry"
       - "cargo-git:/home/dev/.cargo/git"
       - "rustup:/home/dev/.rustup"
-    expose:
-      - "5174"
-      - "1420"
-      - "1421"
-      - "9229"
-      - "5900"
-      - "6080"
     ports:
-      - "5174:5174"
-      - "1420:1420"
-      - "1421:1421"
       - "5900:5900"
       - "6080:6080"
+    networks:
+      - open-mission
+
+  open-mission-app:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.app
+    image: open-mission/app:local
+    working_dir: /open-mission
+    container_name: open-mission-app
+    command: [ "/bin/bash", "/open-mission/docker/start-open-mission-app.sh" ]
+    init: true
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+    depends_on:
+      - surrealdb
+    env_file:
+      - ../.env
+    environment:
+      <<: *open-mission-common-environment
+      OPEN_MISSION_DAEMON_RUNTIME_MODE: source
+    volumes:
+      - "../:/open-mission"
+      - "${HOST_REPOSITORIES_PATH:-/mnt/volatile/repositories}:/repositories"
+      - "${HOST_MISSIONS_PATH:-/mnt/volatile/missions}:/missions"
+      - "${HOST_OPEN_MISSION_CONFIG_PATH:-/mnt/volatile/config}:/config"
+    ports:
+      - "5174:5174"
+    networks:
+      - open-mission
+
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    container_name: open-mission-surrealdb
+    user: "1000:1000"
+    command: [ "start", "--bind", "0.0.0.0:8000", "--user", "root", "--pass", "root", "surrealkv:/data/open-mission" ]
+    restart: unless-stopped
+    environment:
+      SURREAL_LOG: info
+    volumes:
+      - "${HOST_REPOSITORIES_PATH:-/mnt/volatile/repositories}:/repositories"
+      - "${HOST_MISSIONS_PATH:-/mnt/volatile/missions}:/missions"
+      - "${HOST_REPOSITORIES_PATH:-/mnt/volatile/repositories}/data:/data"
+    ports:
+      - "8000:8000"
+    networks:
+      - open-mission
+
+  surrealist:
+    image: surrealdb/surrealist:latest
+    container_name: open-mission-surrealist
+    restart: unless-stopped
+    depends_on:
+      - surrealdb
+    volumes:
+      - "${HOST_REPOSITORIES_PATH:-/mnt/volatile/repositories}:/repositories"
+      - "${HOST_MISSIONS_PATH:-/mnt/volatile/missions}:/missions"
+    ports:
+      - "8080:8080"
+    networks:
+      - open-mission
+
+networks:
+  open-mission:
+    name: open-mission
 
 volumes:
   cargo-registry:

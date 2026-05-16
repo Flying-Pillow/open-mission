@@ -7,7 +7,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "pnpm run generate:surql && rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./build/workflow/engine/copyTemplateFiles.js && mkdir -p build/lib/database && cp src/lib/database/*.surql build/lib/database/",
+    "build": "pnpm run generate:surql && rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./build/workflow/engine/copyTemplateFiles.js && mkdir -p build/lib/database/schema && cp src/lib/database/schema/*.surql build/lib/database/schema/",
     "check": "tsc --noEmit -p tsconfig.json",
     "dev": "pnpm run generate:surql && OPEN_MISSION_DAEMON_RUNTIME_MODE=source tsx --watch --tsconfig ./tsconfig.json ./src/daemon/open-missiond.ts run --dev",
     "generate:surql": "pnpm --filter @flying-pillow/zod-surreal run build && tsx --tsconfig ./tsconfig.json ./scripts/generate-surql.ts",

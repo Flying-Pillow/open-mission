@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Task } from './Task.js';
 import { buildTaskLaunchPrompt } from './taskLaunchPrompt.js';
-import { TaskReworkCommandInputSchema, TaskStartCommandOptionsSchema } from './TaskSchema.js';
+import { TaskConfigureInputSchema, TaskInstanceInputSchema, TaskReworkCommandInputSchema, TaskStartCommandOptionsSchema } from './TaskSchema.js';
 import type { TaskDossierRecordType } from './TaskSchema.js';
 
 const taskState: TaskDossierRecordType = {
@@ -33,6 +33,7 @@ describe('Task', () => {
     it('materializes Task data from Mission task state', () => {
         expect(Task.toDataFromState(taskState, 'mission-1')).toMatchObject({
             id: 'task:mission-1/implementation/01',
+            missionId: 'mission-1',
             taskId: 'implementation/01',
             stageId: 'implementation',
             title: 'Implement task',
@@ -57,7 +58,10 @@ describe('Task', () => {
         expect(TaskStartCommandOptionsSchema.parse({ terminalName: 'terminal-1' })).toEqual({
             terminalName: 'terminal-1'
         });
+        expect(TaskConfigureInputSchema.parse({ autostart: true })).toEqual({ autostart: true });
+        expect(TaskInstanceInputSchema.parse({})).toEqual({});
         expect(() => TaskStartCommandOptionsSchema.parse({ terminalName: 'terminal-1', extra: true })).toThrow();
+        expect(() => TaskConfigureInputSchema.parse({ taskId: 'implementation/01' })).toThrow();
         expect(TaskReworkCommandInputSchema.parse('Needs another pass.')).toBe('Needs another pass.');
         expect(() => TaskReworkCommandInputSchema.parse('')).toThrow();
     });

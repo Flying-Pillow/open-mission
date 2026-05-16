@@ -38,7 +38,7 @@ export class MissionRegistry {
         };
     } = {}) { }
 
-    public async hydrateDaemonMissions(context: { surfacePath: string }): Promise<void> {
+    public async hydrateDaemonMissions(context: EntityExecutionContext): Promise<void> {
         const roots = new Set<string>([path.resolve(context.surfacePath)]);
         for (const repository of await Repository.find({}, context)) {
             if (repository.invalidState) {
@@ -289,10 +289,11 @@ export class MissionRegistry {
 }
 
 export function requireMissionRegistry(context: EntityExecutionContext): MissionRegistry {
-    if (!context.missionRegistry) {
+    const missionRegistry = context['missionRegistry'];
+    if (!(missionRegistry instanceof MissionRegistry)) {
         throw new Error('Mission entity methods require a daemon-owned mission registry.');
     }
-    return context.missionRegistry;
+    return missionRegistry;
 }
 
 function resolveRepositoryPath(repositoryRootPath: string, configuredPath: string): string {

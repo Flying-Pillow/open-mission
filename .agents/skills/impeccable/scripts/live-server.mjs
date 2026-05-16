@@ -44,14 +44,14 @@ const SSE_HEARTBEAT_INTERVAL = 30_000;  // keepalive ping every 30s
 // Port detection
 // ---------------------------------------------------------------------------
 
-async function findOpenPort(start = 8400) {
+async function findOpenPort(start = 8400, host = '127.0.0.1') {
   return new Promise((resolve) => {
     const srv = net.createServer();
-    srv.listen(start, '127.0.0.1', () => {
+    srv.listen(start, host, () => {
       const port = srv.address().port;
       srv.close(() => resolve(port));
     });
-    srv.on('error', () => resolve(findOpenPort(start + 1)));
+    srv.on('error', () => resolve(findOpenPort(start + 1, host)));
   });
 }
 
@@ -61,6 +61,7 @@ async function findOpenPort(start = 8400) {
 
 const state = {
   token: null,
+  host: '127.0.0.1',
   port: null,
   sseClients: new Set(),   // SSE response objects (server→browser push)
   pendingEvents: [],        // browser events waiting for agent ack ({ event, leaseUntil })
@@ -290,6 +291,7 @@ function createRequestHandler({ detectScript, sessionPath, livePath }) {
       const body =
         `window.__IMPECCABLE_TOKEN__ = '${state.token}';\n` +
         `window.__IMPECCABLE_PORT__ = ${state.port};\n` +
+        `window.__IMPECCABLE_ORIGIN__ = '${state.host === '0.0.0.0' ? `http://localhost:${state.port}` : `http://${state.host}:${state.port}`}';\n` +
         sessionScript + '\n' +
         liveScript;
       res.writeHead(200, {
@@ -710,6 +712,7 @@ Commands:
 
 Options:
   --background  Start detached, print connection JSON to stdout, then exit
+  --host=HOST   Bind to a specific host (default: 127.0.0.1)
   --port=PORT   Use a specific port (default: auto-detect starting at 8400)
   --keep-inject Only with stop: skip live-inject.mjs --remove
   --help        Show this help
@@ -811,8 +814,10 @@ if (existingRecord?.info) {
 state.token = randomUUID();
 state.sessionStore = createLiveSessionStore({ cwd: process.cwd() });
 restorePendingEventsFromStore();
+const hostArg = args.find(a => a.startsWith('--host='));
 const portArg = args.find(a => a.startsWith('--port='));
-state.port = portArg ? parseInt(portArg.split('=')[1], 10) : await findOpenPort();
+state.host = hostArg ? hostArg.split('=')[1] : process.env.IMPECCABLE_LIVE_HOST || '127.0.0.1';
+state.port = portArg ? parseInt(portArg.split('=')[1], 10) : await findOpenPort(8400, state.host);
 // Annotation screenshots live in the project root so the agent's Read tool
 // doesn't trip a per-file permission prompt. Sessioned by token so concurrent
 // projects (or quick restarts) don't collide.
@@ -823,9 +828,10 @@ state.sessionDir = fs.mkdtempSync(path.join(annotRoot, 'session-'));
 const { detectScript, sessionPath, livePath } = loadBrowserScripts();
 httpServer = http.createServer(createRequestHandler({ detectScript, sessionPath, livePath }));
 
-httpServer.listen(state.port, '127.0.0.1', () => {
-  writeLiveServerInfo(process.cwd(), { pid: process.pid, port: state.port, token: state.token });
-  const url = `http://localhost:${state.port}`;
+httpServer.listen(state.port, state.host, () => {
+  const advertisedHost = state.host === '0.0.0.0' ? 'localhost' : state.host;
+  const url = `http://${advertisedHost}:${state.port}`;
+  writeLiveServerInfo(process.cwd(), { pid: process.pid, port: state.port, token: state.token, origin: url });
   console.log(`\nImpeccable live server running on ${url}`);
   console.log(`Token: ${state.token}\n`);
   console.log(`Inject: <script src="${url}/live.js"><\/script>`);

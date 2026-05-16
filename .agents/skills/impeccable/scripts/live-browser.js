@@ -1,8 +1,9 @@
 /**
  * Impeccable Live Variant Mode — Browser Script
  *
- * Injected into the user's page via <script src="http://localhost:PORT/live.js">.
- * The server prepends window.__IMPECCABLE_TOKEN__ and window.__IMPECCABLE_PORT__
+ * Injected into the user's page via <script src=".../live.js">.
+ * The server prepends window.__IMPECCABLE_TOKEN__, window.__IMPECCABLE_PORT__,
+ * and window.__IMPECCABLE_ORIGIN__ before this code.
  * before this code.
  *
  * UI: a single floating bar that morphs between three states —
@@ -21,9 +22,22 @@
 
   const TOKEN = window.__IMPECCABLE_TOKEN__;
   const PORT = window.__IMPECCABLE_PORT__;
-  if (!TOKEN || !PORT) {
+  const ORIGIN = window.__IMPECCABLE_ORIGIN__ || (PORT ? ('http://localhost:' + PORT) : null);
+  if (!TOKEN || !ORIGIN) {
     window.__IMPECCABLE_LIVE_INIT__ = false; // reset so the real load can init
     return;
+  }
+
+  function liveUrl(pathname, query) {
+    const base = new URL(ORIGIN, window.location.href);
+    const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+    const basePath = base.pathname.endsWith('/') ? base.pathname.slice(0, -1) : base.pathname;
+    base.pathname = `${basePath}${normalizedPath}`;
+    for (const [key, value] of Object.entries(query || {})) {
+      if (value === undefined || value === null) continue;
+      base.searchParams.set(key, String(value));
+    }
+    return base.toString();
   }
 
   // ---------------------------------------------------------------------------
@@ -1837,7 +1851,7 @@
    * This works even when the dev server caches HTML (Bun, static servers).
    */
   function injectVariantsFromSource(filePath, sessionId) {
-    const url = 'http://localhost:' + PORT + '/source?token=' + TOKEN + '&path=' + encodeURIComponent(filePath);
+    const url = liveUrl('/source', { token: TOKEN, path: filePath });
     fetch(url)
       .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(html => {
@@ -2195,7 +2209,7 @@
   const SSE_MAX_RETRIES = 20;  // generous: heartbeats keep the connection alive, so retries mean real trouble
 
   function connectSSE() {
-    evtSource = new EventSource('http://localhost:' + PORT + '/events?token=' + TOKEN);
+    evtSource = new EventSource(liveUrl('/events', { token: TOKEN }));
 
     evtSource.onopen = () => {
       sseRetries = 0; // reset on successful (re)connect
@@ -2290,7 +2304,7 @@
       if (opts && opts.throwOnError) throw err;
       return null;
     }
-    return fetch('http://localhost:' + PORT + '/events', {
+    return fetch(liveUrl('/events'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(msg),
@@ -2583,7 +2597,7 @@
     if (msLoadPromise) return msLoadPromise;
     msLoadPromise = new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = 'http://localhost:' + PORT + '/modern-screenshot.js';
+      s.src = liveUrl('/modern-screenshot.js');
       s.onload = () => resolve(window.modernScreenshot);
       s.onerror = () => { msLoadPromise = null; reject(new Error('modern-screenshot failed to load')); };
       document.head.appendChild(s);
@@ -2753,11 +2767,10 @@
     const hasAnnotations = snapshot && (snapshot.comments.length > 0 || snapshot.strokes.length > 0);
     if (blob && hasAnnotations) {
       try {
-        const uploadRes = await fetch(
-          'http://localhost:' + PORT + '/annotation?token=' + encodeURIComponent(TOKEN) +
-          '&eventId=' + encodeURIComponent(basePayload.id),
-          { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob },
-        );
+        const uploadRes = await fetch(liveUrl('/annotation', {
+          token: TOKEN,
+          eventId: basePayload.id,
+        }), { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob });
         if (uploadRes.ok) {
           const { path: p } = await uploadRes.json();
           screenshotPath = p;
@@ -3648,7 +3661,7 @@ void main() {
     if (detectScriptLoaded) return;
     detectScriptLoaded = true;
     const s = document.createElement('script');
-    s.src = 'http://localhost:' + PORT + '/detect.js';
+    s.src = liveUrl('/detect.js');
     s.dataset.impeccableExtension = 'true';
     document.head.appendChild(s);
   }
@@ -4143,8 +4156,8 @@ void main() {
     renderDesignBody();
     try {
       const [jsonRes, rawRes] = await Promise.all([
-        fetch(`http://localhost:${PORT}/design-system.json?token=${TOKEN}`, { cache: 'no-store' }),
-        fetch(`http://localhost:${PORT}/design-system/raw?token=${TOKEN}`, { cache: 'no-store' }),
+        fetch(liveUrl('/design-system.json', { token: TOKEN }), { cache: 'no-store' }),
+        fetch(liveUrl('/design-system/raw', { token: TOKEN }), { cache: 'no-store' }),
       ]);
       const jsonData = await jsonRes.json();
       designState.present = jsonData.present === true;

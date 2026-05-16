@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type {
 	EntityChannelType,
+	EntityCommandAcknowledgementType,
 	EntityCommandDescriptorType,
 	EntityEventEnvelopeType,
+	FindResultType,
 	EntityIdType,
 	EntityMethodType,
+	SelectType,
 	EntityContractType
 } from './EntitySchema.js';
 import {
@@ -18,13 +21,12 @@ import type {
 	EntityFormInvocation,
 	EntityQueryInvocation,
 	EntityRemoteResult
-} from './EntityRemote.js';
-import type { MissionRegistry } from '../../daemon/MissionRegistry.js';
+} from './EntityInvocation.js';
 import {
-	getDefaultEntityFactory,
-	type EntityFactory
-} from './EntityFactory.js';
-import type { AgentExecutionRegistry } from '../../daemon/runtime/agent-execution/AgentExecutionRegistry.js';
+	getDefaultFactory,
+	type Factory,
+	type PersistedEntityClass
+} from '../../lib/factory.js';
 
 export type {
 	EntityChannelType,
@@ -42,14 +44,8 @@ export type EntityMethodAvailabilityResult = boolean | EntityMethodAvailability 
 export type EntityExecutionContext = {
 	surfacePath: string;
 	authToken?: string;
-	missionRegistry?: MissionRegistry;
-	missionService?: unknown;
-	entityFactory?: EntityFactory;
-	agentExecutionRegistry?: AgentExecutionRegistry;
-	codeIntelligenceService?: {
-		ensureIndex?(input: { rootPath: string }): Promise<unknown>;
-		readActiveIndex?(input: { rootPath: string }): Promise<unknown>;
-	};
+	entityFactory?: Factory;
+	[capability: string]: unknown;
 };
 
 export abstract class Entity<
@@ -116,8 +112,45 @@ export abstract class Entity<
 		);
 	}
 
-	protected static getEntityFactory(context?: EntityExecutionContext): EntityFactory {
-		return context?.entityFactory ?? getDefaultEntityFactory();
+	protected static getEntityFactory(context?: EntityExecutionContext): Factory {
+		return context?.entityFactory ?? getDefaultFactory();
+	}
+
+	protected static async _read<
+		TEntity extends Entity<object, string>,
+		TStorage extends object
+	>(
+		this: PersistedEntityClass<TEntity, TStorage>,
+		context: EntityExecutionContext | undefined,
+		id: string
+	): Promise<TEntity | undefined> {
+		return await Entity.getEntityFactory(context).read(this, EntityIdSchema.parse(id));
+	}
+
+	protected static async _find<
+		TEntity extends Entity<object, string>,
+		TStorage extends object
+	>(
+		this: PersistedEntityClass<TEntity, TStorage>,
+		context: EntityExecutionContext | undefined,
+		select: SelectType = {}
+	): Promise<FindResultType<TEntity>> {
+		return await Entity.getEntityFactory(context).find(this, select);
+	}
+
+	protected static async _findOne<
+		TEntity extends Entity<object, string>,
+		TStorage extends object
+	>(
+		this: PersistedEntityClass<TEntity, TStorage>,
+		context: EntityExecutionContext | undefined,
+		select: SelectType = {}
+	): Promise<TEntity | undefined> {
+		const result = await this._find(context, {
+			...select,
+			limit: 1
+		});
+		return result.entities[0];
 	}
 
 	public static async commandDescriptors(
@@ -131,7 +164,7 @@ export abstract class Entity<
 		});
 	}
 
-	protected getEntityFactory(context?: EntityExecutionContext): EntityFactory {
+	protected getEntityFactory(context?: EntityExecutionContext): Factory {
 		return Entity.getEntityFactory(context);
 	}
 
@@ -142,11 +175,27 @@ export abstract class Entity<
 		context: EntityExecutionContext
 	): Promise<EntityRemoteResult> {
 		const method = Entity.resolveContractMethod(kind, contract, input.method);
+		Entity.assertInvocationIdentity(contract.entity, input.method, method.execution, input.id);
 
 		const payload = method.payload.parse(input.payload ?? {});
-		const result = await Entity.executeClassMethod(contract, method, input.method, payload, context);
+		const result = await Entity.executeClassMethod(contract, method, input, payload, context);
 
 		return method.result.parse(result);
+	}
+
+	private static assertInvocationIdentity(
+		entity: string,
+		methodName: string,
+		execution: EntityMethodType['execution'],
+		id: EntityIdType | undefined
+	): void {
+		if (execution === 'entity' && !id) {
+			throw new Error(`Entity method '${entity}.${methodName}' requires top-level id.`);
+		}
+
+		if (execution === 'class' && id) {
+			throw new Error(`Class method '${entity}.${methodName}' must not receive top-level id.`);
+		}
 	}
 
 	private static resolveContractMethod(
@@ -170,20 +219,20 @@ export abstract class Entity<
 	private static async executeClassMethod(
 		contract: EntityContractType,
 		method: EntityMethodType,
-		methodName: string,
+		input: EntityQueryInvocation | EntityCommandInvocation | EntityFormInvocation,
 		payload: unknown,
 		context: EntityExecutionContext
 	): Promise<unknown> {
 		const entityClass = contract.entityClass;
 		if (!entityClass) {
-			throw new Error(`Entity '${contract.entity}' does not define an implementation class for method '${methodName}'.`);
+			throw new Error(`Entity '${contract.entity}' does not define an implementation class for method '${input.method}'.`);
 		}
 
 		if (method.execution === 'entity') {
-			return Entity.executeEntityInstanceMethod(contract.entity, entityClass, methodName, payload, context);
+			return Entity.executeEntityInstanceMethod(contract.entity, entityClass, input, payload, context);
 		}
 
-		return Entity.executeEntityClassMethod(contract.entity, entityClass, methodName, payload, context);
+		return Entity.executeEntityClassMethod(contract.entity, entityClass, input.method, payload, context);
 	}
 
 	private static async executeEntityClassMethod(
@@ -206,26 +255,26 @@ export abstract class Entity<
 	private static async executeEntityInstanceMethod(
 		entity: string,
 		entityClass: EntityContractType['entityClass'],
-		methodName: string,
+		input: EntityQueryInvocation | EntityCommandInvocation | EntityFormInvocation,
 		payload: unknown,
 		context: EntityExecutionContext
 	): Promise<unknown> {
 		const resolver = (entityClass as { resolve?: (payload: unknown, context?: EntityExecutionContext) => Promise<unknown> | unknown }).resolve;
 		if (typeof resolver !== 'function') {
-			throw new Error(`Entity '${entity}' does not define resolve() for instance method '${methodName}'.`);
+			throw new Error(`Entity '${entity}' does not define resolve() for instance method '${input.method}'.`);
 		}
 
-		const instance = await resolver.call(entityClass, payload, context);
+		const instance = await resolver.call(entityClass, input.id ? { id: input.id } : payload, context);
 		if (!instance || typeof instance !== 'object') {
-			throw new Error(`Entity '${entity}' could not be resolved for method '${methodName}'.`);
+			throw new Error(`Entity '${entity}' could not be resolved for method '${input.method}'.`);
 		}
 
-		const implementation = (instance as Record<string, unknown>)[methodName];
+		const implementation = (instance as Record<string, unknown>)[input.method];
 		if (typeof implementation !== 'function') {
-			throw new Error(`Entity '${entity}' does not define instance method '${methodName}'.`);
+			throw new Error(`Entity '${entity}' does not define instance method '${input.method}'.`);
 		}
 
-		await Entity.assertMethodAvailable(instance, methodName, 'entity', payload, context);
+		await Entity.assertMethodAvailable(instance, input.method, 'entity', payload, context);
 
 		return implementation.call(instance, payload, context);
 	}
@@ -276,13 +325,13 @@ export abstract class Entity<
 			};
 	}
 
-	private static resolveCommandTarget(entity: object): { targetId?: EntityIdType } {
+	private static resolveCommandTarget(entity: object): { id?: EntityIdType } {
 		const candidate = (entity as { id?: unknown }).id;
 		if (typeof candidate !== 'string') {
 			return {};
 		}
 		const parsed = EntityIdSchema.safeParse(candidate);
-		return parsed.success ? { targetId: parsed.data } : {};
+		return parsed.success ? { id: parsed.data } : {};
 	}
 
 	private dataValue: TData;
@@ -358,8 +407,21 @@ export abstract class Entity<
 		return this.toData();
 	}
 
-	public async remove(_input: unknown, _context?: EntityExecutionContext): Promise<unknown> {
-		throw new Error(`Entity '${this.entityName}' does not implement remove().`);
+	public async save(context?: EntityExecutionContext): Promise<this> {
+		const entityClass = this.constructor as PersistedEntityClass<this, TData>;
+		const saved = await this.getEntityFactory(context).save(entityClass, this.toData());
+		return this.updateFromData(saved.toData() as TData);
+	}
+
+	public async remove(_input: unknown, context?: EntityExecutionContext): Promise<EntityCommandAcknowledgementType> {
+		const entityClass = this.constructor as PersistedEntityClass<this, TData>;
+		await this.getEntityFactory(context).remove(entityClass, this.id);
+		return {
+			ok: true,
+			entity: this.entityName,
+			method: 'remove',
+			id: this.id
+		};
 	}
 }
 

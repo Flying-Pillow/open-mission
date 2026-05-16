@@ -42,7 +42,8 @@ describe('entity remote invocation schemas', () => {
             entityCommandInvocationSchema.parse({
                 entity: 'Repository',
                 method: 'startMissionFromIssue',
-                payload: { id: 'repo-1', issueNumber: 42 }
+                id: 'repo-1',
+                payload: { issueNumber: 42 }
             })
         ).not.toThrow();
 
@@ -50,7 +51,8 @@ describe('entity remote invocation schemas', () => {
             entityFormInvocationSchema.parse({
                 entity: 'Repository',
                 method: 'startMissionFromBrief',
-                payload: { id: 'repo-1', title: 'Title', body: 'Body' }
+                id: 'repo-1',
+                payload: { title: 'Title', body: 'Body' }
             })
         ).not.toThrow();
     });
@@ -78,13 +80,14 @@ describe('entity remote dispatch', () => {
         const invocation: EntityCommandInvocation = {
             entity: 'Repository',
             method: 'startMissionFromIssue',
-            payload: { id: 'repo-1', issueNumber: 42 }
+            id: 'repo-1',
+            payload: { issueNumber: 42 }
         };
 
         await expect(executeEntityCommand(gateway, invocation)).resolves.toEqual({
             entity: 'Repository',
             method: 'startMissionFromIssue',
-            payload: { id: 'repo-1', issueNumber: 42 }
+            payload: { issueNumber: 42 }
         });
         expect(gateway.executeEntityCommand).toHaveBeenCalledWith(invocation);
     });
@@ -94,13 +97,14 @@ describe('entity remote dispatch', () => {
         const invocation: EntityFormInvocation = {
             entity: 'Repository',
             method: 'startMissionFromBrief',
-            payload: { id: 'repo-1', title: 'Title', body: 'Body' }
+            id: 'repo-1',
+            payload: { title: 'Title', body: 'Body' }
         };
 
         await expect(executeEntityForm(gateway, invocation)).resolves.toEqual({
             entity: 'Repository',
             method: 'startMissionFromBrief',
-            payload: { id: 'repo-1', title: 'Title', body: 'Body' }
+            payload: { title: 'Title', body: 'Body' }
         });
         expect(gateway.executeEntityCommand).toHaveBeenCalledWith(invocation);
     });

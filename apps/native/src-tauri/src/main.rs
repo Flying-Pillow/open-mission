@@ -115,7 +115,6 @@ fn start_embedded_web_server(app: &App, port: u16) -> Result<Child, tauri::Error
         .env("HOST", EMBEDDED_SERVER_HOST)
         .env("PORT", port.to_string())
         .env("ORIGIN", &origin)
-        .env("OPEN_MISSION_SURFACE_PATH", &repository_root)
         .env("OPEN_MISSION_REPOSITORY_ROOT", &repository_root)
         .arg(&entry_path)
         .stdout(Stdio::from(stdout_log_file))
@@ -276,7 +275,6 @@ fn ensure_open_mission_daemon_started() -> Result<(), String> {
 
     let output = Command::new(&node_binary)
         .current_dir(&repository_root)
-        .env("OPEN_MISSION_SURFACE_PATH", &repository_root)
         .env("OPEN_MISSION_DAEMON_RUNTIME_MODE", "build")
         .arg(&daemon_entry_path)
         .arg("start")

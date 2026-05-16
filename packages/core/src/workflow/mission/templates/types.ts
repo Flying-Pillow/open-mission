@@ -1,8 +1,8 @@
 import type {
 	MissionBrief,
-	MissionTaskAgent,
 	MissionTaskStatus
 } from '../../../entities/Mission/MissionSchema.js';
+import type { MissionTaskAgent } from '../../../entities/Mission/MissionDossierFilesystem.js';
 import type { TaskContextArtifactReferenceType } from '../../../entities/Task/TaskSchema.js';
 import type { MissionArtifactKey, MissionStageId } from '../../manifest.js';
 import type { TemplateObject } from '../../engine/templates/templateRenderer.js';

@@ -114,7 +114,7 @@ export function compileDefineFieldAndIndexStatements(
     models: CompiledSurrealModel[],
     context: DdlCompileContext = { overwrite: false, implicitFullTextIndexes: [] }
 ): string[] {
-    if (!field.storage) {
+    if (!field.storage || field.name === 'id') {
         return [];
     }
 
@@ -184,7 +184,7 @@ function compileDefineFieldStatementWithContext(
     return `${clauses.join(' ')};`;
 }
 
-function compileDefineAnalyzerStatement(analyzer: CompiledSurrealModel['analyzers'][number], context: DdlCompileContext): string {
+export function compileDefineAnalyzerStatement(analyzer: CompiledSurrealModel['analyzers'][number], context: DdlCompileContext): string {
     return [
         'DEFINE ANALYZER',
         ...(context.overwrite ? ['OVERWRITE'] : []),
@@ -196,7 +196,7 @@ function compileDefineAnalyzerStatement(analyzer: CompiledSurrealModel['analyzer
     ].join(' ') + ';';
 }
 
-function compileDefineTableIndexStatement(
+export function compileDefineTableIndexStatement(
     model: CompiledSurrealModel,
     index: CompiledSurrealModel['indexes'][number],
     context: DdlCompileContext
@@ -246,6 +246,10 @@ function compileFieldType(
             return referencedTable;
         });
         type = `record<${referencedTables.join('|')}>`;
+    } else if (model.kind === 'relation' && field.name === 'in' && model.from) {
+        type = `record<${model.from}>`;
+    } else if (model.kind === 'relation' && field.name === 'out' && model.to) {
+        type = `record<${model.to}>`;
     } else if (model.kind === 'relation' && (field.name === 'in' || field.name === 'out')) {
         type = 'record';
     }

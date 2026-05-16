@@ -10,6 +10,7 @@ describe('mission template resolution', () => {
                 repositoryRootPath: '/',
                 branchRef: 'mission/17-reconstruct-agent-runtime-unification',
                 brief: {
+                    type: 'task',
                     title: 'Reconstruct agent adapter unification',
                     body: 'Reconstruct agent adapter unification body'
                 }
@@ -28,6 +29,7 @@ describe('mission template resolution', () => {
                 repositoryRootPath: '/',
                 branchRef: 'mission/1-initial-setup',
                 brief: {
+                    type: 'task',
                     title: 'Initial setup',
                     body: 'Initial setup body'
                 }
@@ -46,6 +48,7 @@ describe('mission template resolution', () => {
                 repositoryRootPath: '/',
                 branchRef: 'mission/1-initial-setup',
                 brief: {
+                    type: 'task',
                     title: 'Initial setup',
                     body: 'Initial setup body'
                 }
@@ -65,6 +68,7 @@ describe('mission template resolution', () => {
                 repositoryRootPath: '/',
                 branchRef: 'mission/1-initial-setup',
                 brief: {
+                    type: 'task',
                     title: 'Initial setup',
                     body: 'Initial setup body'
                 }

@@ -3,6 +3,7 @@ import type {
 } from '../../workflow/engine/types.js';
 import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
+import { EntityIdSchema } from '../Entity/EntitySchema.js';
 import type { AgentAdapter } from '../../daemon/runtime/agent-execution/adapter/AgentAdapter.js';
 import type { AgentExecutionType } from '../AgentExecution/AgentExecutionSchema.js';
 import type { AgentExecutionLaunchRequestType } from '../AgentExecution/AgentExecutionSchema.js';
@@ -28,6 +29,7 @@ import {
 	TaskConfigureCommandOptionsSchema,
 	TaskStartCommandOptionsSchema,
 	TaskReworkCommandInputSchema,
+	TaskInstanceInputSchema,
 	TaskLocatorSchema,
 	TaskCommandIds,
 	taskEntityName,
@@ -97,6 +99,7 @@ export class Task extends Entity<TaskDataType, string> {
 	public static toDataFromState(task: TaskDossierRecordType, missionId: string): TaskDataType {
 		return TaskDataSchema.parse({
 			id: Task.createEntityId(missionId, task.taskId),
+			missionId,
 			taskId: task.taskId,
 			stageId: task.stage,
 			sequence: task.sequence,
@@ -139,7 +142,15 @@ export class Task extends Entity<TaskDataType, string> {
 	}
 
 	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<Task> {
-		const input = TaskLocatorSchema.parse(payload);
+		const inputRecord = Task.isRecord(payload) ? payload : {};
+		const entityId = EntityIdSchema.parse(inputRecord['id']);
+		const separatorIndex = entityId.indexOf(':');
+		const uniqueId = entityId.slice(separatorIndex + 1);
+		const missionSeparatorIndex = uniqueId.indexOf('/');
+		const input = TaskLocatorSchema.parse({
+			missionId: uniqueId.slice(0, missionSeparatorIndex),
+			taskId: uniqueId.slice(missionSeparatorIndex + 1)
+		});
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
@@ -253,7 +264,7 @@ export class Task extends Entity<TaskDataType, string> {
 		if (state) {
 			const owner = ownerOrData as TaskOwner;
 			super(Task.toDataFromState(state, owner.missionId));
-			this.scope = scope;
+			this.scope = owner;
 			this.state = state;
 			return;
 		}
@@ -446,10 +457,11 @@ export class Task extends Entity<TaskDataType, string> {
 
 	public async configure(payload: unknown, context: EntityExecutionContext) {
 		const input = TaskConfigureInputSchema.parse(payload);
-		const mission = await Task.loadRequiredMission(input, context);
+		const missionId = this.readMissionId();
+		const mission = await Task.loadRequiredMission({ missionId }, context);
 		try {
-			await mission.configureTask(input.taskId, Task.readConfigureCommandOptions(input));
-			return Task.buildCommandAcknowledgement(input, 'configure', TaskCommandIds.configure);
+			await mission.configureTask(this.taskId, Task.readConfigureCommandOptions(input));
+			return Task.buildCommandAcknowledgement({ missionId, taskId: this.taskId }, 'configure', TaskCommandIds.configure);
 		} finally {
 			mission.dispose();
 		}
@@ -457,10 +469,11 @@ export class Task extends Entity<TaskDataType, string> {
 
 	public async start(payload: unknown, context: EntityExecutionContext) {
 		const input = TaskStartInputSchema.parse(payload);
-		const mission = await Task.loadRequiredMission(input, context);
+		const missionId = this.readMissionId();
+		const mission = await Task.loadRequiredMission({ missionId }, context);
 		try {
-			await mission.startTask(input.taskId, Task.readStartCommandOptions(input));
-			return Task.buildCommandAcknowledgement(input, 'start', TaskCommandIds.start);
+			await mission.startTask(this.taskId, Task.readStartCommandOptions(input));
+			return Task.buildCommandAcknowledgement({ missionId, taskId: this.taskId }, 'start', TaskCommandIds.start);
 		} finally {
 			mission.dispose();
 		}
@@ -468,32 +481,35 @@ export class Task extends Entity<TaskDataType, string> {
 
 	public async cancel(payload: unknown, context: EntityExecutionContext) {
 		const input = TaskCancelInputSchema.parse(payload);
-		const mission = await Task.loadRequiredMission(input, context);
+		const missionId = this.readMissionId();
+		const mission = await Task.loadRequiredMission({ missionId }, context);
 		try {
-			await mission.cancelTask(input.taskId, input.reason ?? 'operator cancelled task');
-			return Task.buildCommandAcknowledgement(input, 'cancel', TaskCommandIds.cancel);
+			await mission.cancelTask(this.taskId, input.reason ?? 'operator cancelled task');
+			return Task.buildCommandAcknowledgement({ missionId, taskId: this.taskId }, 'cancel', TaskCommandIds.cancel);
 		} finally {
 			mission.dispose();
 		}
 	}
 
 	public async complete(payload: unknown, context: EntityExecutionContext) {
-		const input = TaskLocatorSchema.parse(payload);
-		const mission = await Task.loadRequiredMission(input, context);
+		TaskInstanceInputSchema.parse(payload);
+		const missionId = this.readMissionId();
+		const mission = await Task.loadRequiredMission({ missionId }, context);
 		try {
-			await mission.completeTask(input.taskId);
-			return Task.buildCommandAcknowledgement(input, 'complete', TaskCommandIds.complete);
+			await mission.completeTask(this.taskId);
+			return Task.buildCommandAcknowledgement({ missionId, taskId: this.taskId }, 'complete', TaskCommandIds.complete);
 		} finally {
 			mission.dispose();
 		}
 	}
 
 	public async reopen(payload: unknown, context: EntityExecutionContext) {
-		const input = TaskLocatorSchema.parse(payload);
-		const mission = await Task.loadRequiredMission(input, context);
+		TaskInstanceInputSchema.parse(payload);
+		const missionId = this.readMissionId();
+		const mission = await Task.loadRequiredMission({ missionId }, context);
 		try {
-			await mission.reopenTask(input.taskId);
-			return Task.buildCommandAcknowledgement(input, 'reopen', TaskCommandIds.reopen);
+			await mission.reopenTask(this.taskId);
+			return Task.buildCommandAcknowledgement({ missionId, taskId: this.taskId }, 'reopen', TaskCommandIds.reopen);
 		} finally {
 			mission.dispose();
 		}
@@ -501,48 +517,52 @@ export class Task extends Entity<TaskDataType, string> {
 
 	public async rework(payload: unknown, context: EntityExecutionContext) {
 		const input = TaskReworkInputSchema.parse(payload);
-		const mission = await Task.loadRequiredMission(input, context);
+		const missionId = this.readMissionId();
+		const mission = await Task.loadRequiredMission({ missionId }, context);
 		try {
-			await mission.reworkTask(input.taskId, {
+			await mission.reworkTask(this.taskId, {
 				actor: 'human',
 				reasonCode: 'manual.instruction',
 				summary: input.input,
 				artifactRefs: []
 			});
-			return Task.buildCommandAcknowledgement(input, 'rework', TaskCommandIds.rework);
+			return Task.buildCommandAcknowledgement({ missionId, taskId: this.taskId }, 'rework', TaskCommandIds.rework);
 		} finally {
 			mission.dispose();
 		}
 	}
 
 	public async reworkFromVerification(payload: unknown, context: EntityExecutionContext) {
-		const input = TaskLocatorSchema.parse(payload);
-		const mission = await Task.loadRequiredMission(input, context);
+		TaskInstanceInputSchema.parse(payload);
+		const missionId = this.readMissionId();
+		const mission = await Task.loadRequiredMission({ missionId }, context);
 		try {
-			await mission.reworkTaskFromVerification(input.taskId);
-			return Task.buildCommandAcknowledgement(input, 'reworkFromVerification', TaskCommandIds.reworkFromVerification);
+			await mission.reworkTaskFromVerification(this.taskId);
+			return Task.buildCommandAcknowledgement({ missionId, taskId: this.taskId }, 'reworkFromVerification', TaskCommandIds.reworkFromVerification);
 		} finally {
 			mission.dispose();
 		}
 	}
 
 	public async enableAutostart(payload: unknown, context: EntityExecutionContext) {
-		const input = TaskLocatorSchema.parse(payload);
-		const mission = await Task.loadRequiredMission(input, context);
+		TaskInstanceInputSchema.parse(payload);
+		const missionId = this.readMissionId();
+		const mission = await Task.loadRequiredMission({ missionId }, context);
 		try {
-			await mission.setTaskAutostart(input.taskId, true);
-			return Task.buildCommandAcknowledgement(input, 'enableAutostart', TaskCommandIds.enableAutostart);
+			await mission.setTaskAutostart(this.taskId, true);
+			return Task.buildCommandAcknowledgement({ missionId, taskId: this.taskId }, 'enableAutostart', TaskCommandIds.enableAutostart);
 		} finally {
 			mission.dispose();
 		}
 	}
 
 	public async disableAutostart(payload: unknown, context: EntityExecutionContext) {
-		const input = TaskLocatorSchema.parse(payload);
-		const mission = await Task.loadRequiredMission(input, context);
+		TaskInstanceInputSchema.parse(payload);
+		const missionId = this.readMissionId();
+		const mission = await Task.loadRequiredMission({ missionId }, context);
 		try {
-			await mission.setTaskAutostart(input.taskId, false);
-			return Task.buildCommandAcknowledgement(input, 'disableAutostart', TaskCommandIds.disableAutostart);
+			await mission.setTaskAutostart(this.taskId, false);
+			return Task.buildCommandAcknowledgement({ missionId, taskId: this.taskId }, 'disableAutostart', TaskCommandIds.disableAutostart);
 		} finally {
 			mission.dispose();
 		}
@@ -663,9 +683,20 @@ export class Task extends Entity<TaskDataType, string> {
 		});
 	}
 
+	private readMissionId(): string {
+		const entityId = EntityIdSchema.parse(this.id);
+		const separatorIndex = entityId.indexOf(':');
+		const uniqueId = entityId.slice(separatorIndex + 1);
+		const missionSeparatorIndex = uniqueId.indexOf('/');
+		if (missionSeparatorIndex <= 0 || missionSeparatorIndex === uniqueId.length - 1) {
+			throw new Error(`Task entity id '${entityId}' is invalid.`);
+		}
+		return uniqueId.slice(0, missionSeparatorIndex);
+	}
+
 	private evaluateTransitionAvailability(intent: MissionTaskStatusIntent) {
 		const state = this.state;
-		const currentStatus = state?.status ?? this.data.lifecycle;
+		const currentStatus = (state?.status ?? this.data.lifecycle) as TaskDossierRecordType['status'];
 		const waitingOn = state?.waitingOn ?? this.data.waitingOnTaskIds;
 		const delivered = this.scope?.isMissionDelivered() ?? false;
 		const evaluation = evaluateMissionTaskStatusIntent(intent, {

@@ -1,6 +1,6 @@
 import { TerminalRegistry } from '../../entities/Terminal/TerminalRegistry.js';
-import type { AgentExecutionRuntimeSummary, AgentExecutionRegistry } from './agent/AgentExecutionRegistry.js';
-import type { OpenMissionMcpServer } from './agent/mcp/OpenMissionMcpServer.js';
+import type { AgentExecutionRuntimeSummary, AgentExecutionRegistry } from './agent-execution/AgentExecutionRegistry.js';
+import type { OpenMissionMcpServer } from './agent-execution/mcp/OpenMissionMcpServer.js';
 import type {
     DaemonRuntimeLease,
     DaemonRuntimeOwnerReference,
@@ -8,12 +8,18 @@ import type {
 } from './DaemonRuntimeSupervisionSchema.js';
 import type { DaemonRuntimeSupervisionSnapshot } from './DaemonRuntimeSupervisionSchema.js';
 
+type ImpeccableLiveRegistryLike = {
+    readRuntimeSnapshot(): DaemonRuntimeSupervisionSnapshot;
+    dispose(): Promise<void>;
+};
+
 export type DaemonRuntimeSupervisorOptions = {
     daemonProcessId: number;
     startedAt: string;
     terminalRegistry: TerminalRegistry;
     agentExecutionRegistry?: AgentExecutionRegistry;
     openMissionMcpServer?: OpenMissionMcpServer;
+    impeccableLiveRegistry?: ImpeccableLiveRegistryLike;
 };
 
 export class DaemonRuntimeSupervisor {
@@ -22,6 +28,7 @@ export class DaemonRuntimeSupervisor {
     private readonly terminalRegistry: TerminalRegistry;
     private readonly agentExecutionRegistry: AgentExecutionRegistry | undefined;
     private readonly openMissionMcpServer: OpenMissionMcpServer | undefined;
+    private readonly impeccableLiveRegistry: ImpeccableLiveRegistryLike | undefined;
 
     public constructor(options: DaemonRuntimeSupervisorOptions) {
         this.daemonProcessId = options.daemonProcessId;
@@ -29,6 +36,7 @@ export class DaemonRuntimeSupervisor {
         this.terminalRegistry = options.terminalRegistry;
         this.agentExecutionRegistry = options.agentExecutionRegistry;
         this.openMissionMcpServer = options.openMissionMcpServer;
+        this.impeccableLiveRegistry = options.impeccableLiveRegistry;
     }
 
     public async start(): Promise<void> {
@@ -36,10 +44,13 @@ export class DaemonRuntimeSupervisor {
     }
 
     public readSnapshot(): DaemonRuntimeSupervisionSnapshot {
-        const baseSnapshot = this.terminalRegistry.readRuntimeSupervisionSnapshot({
+        const terminalSnapshot = this.terminalRegistry.readRuntimeSupervisionSnapshot({
             daemonProcessId: this.daemonProcessId,
             startedAt: this.startedAt
         });
+        const baseSnapshot = this.impeccableLiveRegistry
+            ? mergeRuntimeSnapshots(terminalSnapshot, this.impeccableLiveRegistry.readRuntimeSnapshot())
+            : terminalSnapshot;
         const executionSummary = this.agentExecutionRegistry?.readRuntimeSummary();
         if (!executionSummary) {
             return baseSnapshot;
@@ -85,9 +96,41 @@ export class DaemonRuntimeSupervisor {
     }
 
     public async releaseAll(): Promise<void> {
+        await this.impeccableLiveRegistry?.dispose();
         await this.openMissionMcpServer?.stop();
         await this.terminalRegistry.dispose();
     }
+}
+
+function mergeRuntimeSnapshots(base: DaemonRuntimeSupervisionSnapshot, extension: DaemonRuntimeSupervisionSnapshot): DaemonRuntimeSupervisionSnapshot {
+    const owners = new Map(base.owners.map((owner) => [stableRuntimeReferenceKey(owner), owner]));
+    for (const owner of extension.owners) {
+        owners.set(stableRuntimeReferenceKey(owner), owner);
+    }
+
+    const relationshipKeys = new Set<string>();
+    const relationships: DaemonRuntimeRelationship[] = [];
+    for (const relationship of [...base.relationships, ...extension.relationships]) {
+        const key = `${stableRuntimeReferenceKey(relationship.parent)}>${stableGraphNodeReferenceKey(relationship.child)}>${relationship.relationship}`;
+        if (relationshipKeys.has(key)) {
+            continue;
+        }
+        relationshipKeys.add(key);
+        relationships.push(relationship);
+    }
+
+    const leases = new Map<string, DaemonRuntimeLease>();
+    for (const lease of [...base.leases, ...extension.leases]) {
+        leases.set(lease.leaseId, lease);
+    }
+
+    return {
+        daemonProcessId: base.daemonProcessId,
+        startedAt: base.startedAt,
+        owners: [...owners.values()],
+        relationships,
+        leases: [...leases.values()]
+    };
 }
 
 function toAgentExecutionOwnerReference(entry: AgentExecutionRuntimeSummary['executions'][number]): DaemonRuntimeOwnerReference {
@@ -111,6 +154,13 @@ function stableRuntimeReferenceKey(reference: DaemonRuntimeOwnerReference): stri
         case 'agent-execution':
             return `agent-execution:${reference.ownerId}:${reference.agentExecutionId}`;
     }
+}
+
+function stableGraphNodeReferenceKey(reference: DaemonRuntimeRelationship['child']): string {
+    if (reference.kind === 'runtime-lease') {
+        return `runtime-lease:${reference.leaseId}`;
+    }
+    return stableRuntimeReferenceKey(reference);
 }
 
 function stableAgentExecutionOwnerKey(ownerId: string, agentExecutionId: string): string {

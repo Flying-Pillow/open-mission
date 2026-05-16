@@ -1,0 +1,18 @@
+DEFINE TABLE OVERWRITE code_graph_snapshot TYPE NORMAL SCHEMAFULL COMMENT "Canonical code graph snapshot records.";
+DEFINE FIELD OVERWRITE codeRootId ON TABLE code_graph_snapshot TYPE string COMMENT "Stable code-root discriminator used to group snapshots for one indexed repository root.";
+DEFINE INDEX OVERWRITE code_graph_snapshot_coderootid_idx ON TABLE code_graph_snapshot FIELDS codeRootId;
+DEFINE FIELD OVERWRITE indexedAt ON TABLE code_graph_snapshot TYPE string COMMENT "Timestamp string recorded when this snapshot was built.";
+DEFINE INDEX OVERWRITE code_graph_snapshot_indexedat_idx ON TABLE code_graph_snapshot FIELDS indexedAt;
+DEFINE FIELD OVERWRITE indexerVersion ON TABLE code_graph_snapshot TYPE string COMMENT "Canonical code indexer version that produced this snapshot.";
+DEFINE INDEX OVERWRITE code_graph_snapshot_indexerversion_idx ON TABLE code_graph_snapshot FIELDS indexerVersion;
+DEFINE FIELD OVERWRITE objectCount ON TABLE code_graph_snapshot TYPE int COMMENT "Number of code graph objects stored for this snapshot.";
+DEFINE FIELD OVERWRITE previousActiveSnapshotId ON TABLE code_graph_snapshot TYPE option<string> COMMENT "Optional prior active snapshot id replaced by this snapshot.";
+DEFINE FIELD OVERWRITE relationCount ON TABLE code_graph_snapshot TYPE int COMMENT "Number of code graph relations stored for this snapshot.";
+DEFINE FIELD OVERWRITE repositoryId ON TABLE code_graph_snapshot TYPE string COMMENT "Canonical Repository Entity id that owns this persisted code graph snapshot.";
+DEFINE FIELD OVERWRITE rootFingerprint ON TABLE code_graph_snapshot TYPE string COMMENT "Deterministic fingerprint of the indexed root contents for this snapshot.";
+DEFINE INDEX OVERWRITE code_graph_snapshot_rootfingerprint_idx ON TABLE code_graph_snapshot FIELDS rootFingerprint;
+DEFINE FIELD OVERWRITE rootPath ON TABLE code_graph_snapshot TYPE string COMMENT "Absolute repository root path that was indexed to produce this snapshot.";
+DEFINE INDEX OVERWRITE code_graph_snapshot_rootpath_idx ON TABLE code_graph_snapshot FIELDS rootPath;
+DEFINE FIELD OVERWRITE status ON TABLE code_graph_snapshot TYPE string COMMENT "Persisted lifecycle status for this code graph snapshot.";
+DEFINE INDEX OVERWRITE code_graph_snapshot_status_idx ON TABLE code_graph_snapshot FIELDS status;
+DEFINE INDEX OVERWRITE code_graph_snapshot_repository_root_status_indexed_at_idx ON TABLE code_graph_snapshot FIELDS repositoryId, codeRootId, status, indexedAt;

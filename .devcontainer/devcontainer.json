@@ -9,10 +9,15 @@
     "service": "development",
     "workspaceFolder": "/open-mission",
     "runServices": [
-        "development"
+        "development",
+        "open-mission-app",
+        "surrealdb",
+        "surrealist"
     ],
     "forwardPorts": [
         5174,
+        8000,
+        8080,
         1420,
         1421,
         5900,
@@ -23,6 +28,14 @@
         "5174": {
             "label": "Open Mission web dev server",
             "onAutoForward": "silent"
+        },
+        "8000": {
+            "label": "SurrealDB",
+            "onAutoForward": "silent"
+        },
+        "8080": {
+            "label": "Surrealist",
+            "onAutoForward": "openBrowserOnce"
         },
         "1420": {
             "label": "Tauri dev host",

@@ -1,3 +1,4 @@
+import { field, table } from '@flying-pillow/zod-surreal';
 import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
@@ -37,21 +38,41 @@ export const StageCommandInputSchema = StageLocatorSchema.extend({
 }).strict();
 
 export const StageCommandMethodSchema = z.enum(['generateTasks']);
+export const StageInstanceInputSchema = z.object({}).strict();
 
 export const StageStorageSchema = EntityStorageSchema.extend({
+    missionId: z.string().trim().min(1).register(field, {
+        reference: 'Mission',
+        onDelete: 'cascade',
+        index: 'normal',
+        description: 'Owning Mission reference stored in the physical Stage record.'
+    }),
     stageId: StageIdSchema,
-    lifecycle: z.string().trim().min(1),
-    isCurrentStage: z.boolean(),
-    artifacts: z.array(ArtifactDataSchema),
+    lifecycle: z.string().trim().min(1).register(field, {
+        index: 'normal',
+        description: 'Stage lifecycle state stored in the physical Stage record.'
+    }),
+    isCurrentStage: z.boolean().register(field, {
+        index: 'normal',
+        description: 'Whether this Stage is the current Mission stage in the physical Stage record.'
+    }),
+    artifacts: z.array(ArtifactDataSchema).register(field, {
+        description: 'Stage artifact data stored in the physical Stage record.'
+    })
+}).strict().register(table, {
+    table: 'stage',
+    schemafull: true,
+    description: 'Mission stage physical storage record. SurrealDB record id is the Stage identity.'
+});
+
+export const StageDataSchema = StageStorageSchema.extend({
     tasks: z.array(TaskDataSchema)
 }).strict();
 
-export const StageDataSchema = StageStorageSchema.extend({}).strict();
-
-const StageStoragePayloadSchema = StageStorageSchema.omit({ id: true });
+const StageDataPayloadSchema = StageDataSchema.omit({ id: true });
 
 export const StageSchema = EntitySchema.extend({
-    ...StageStoragePayloadSchema.shape,
+    ...StageDataPayloadSchema.shape,
     tasks: z.array(TaskSchema)
 }).strict();
 
@@ -85,6 +106,7 @@ export type StageEventSubjectType = z.infer<typeof StageEventSubjectSchema>;
 export type StageCommandIdType = z.infer<typeof StageCommandIdSchema>;
 export type StageCommandMethodType = z.infer<typeof StageCommandMethodSchema>;
 export type StageCommandInputType = z.infer<typeof StageCommandInputSchema>;
+export type StageInstanceInputType = z.infer<typeof StageInstanceInputSchema>;
 export type StageStorageType = z.infer<typeof StageStorageSchema>;
 export type StageDataType = z.infer<typeof StageDataSchema>;
 export type StageType = z.infer<typeof StageSchema>;

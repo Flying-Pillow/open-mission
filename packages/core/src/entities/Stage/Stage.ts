@@ -1,10 +1,12 @@
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
+import { EntityIdSchema } from '../Entity/EntitySchema.js';
 import type { MissionStageId } from '../../workflow/mission/manifest.js';
 import { Task } from '../Task/Task.js';
 import {
 	StageDataSchema,
 	StageCommandAcknowledgementSchema,
 	StageCommandInputSchema,
+	StageInstanceInputSchema,
 	StageLocatorSchema,
 	StageCommandIds,
 	stageEntityName,
@@ -73,7 +75,17 @@ export class Stage extends Entity<StageDataType, string> {
 	}
 
 	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<Stage> {
-		const input = StageLocatorSchema.parse(payload);
+		const inputRecord = typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+			? payload as Record<string, unknown>
+			: {};
+		const entityId = EntityIdSchema.parse(inputRecord['id']);
+		const separatorIndex = entityId.indexOf(':');
+		const uniqueId = entityId.slice(separatorIndex + 1);
+		const missionSeparatorIndex = uniqueId.indexOf('/');
+		const input = StageLocatorSchema.parse({
+			missionId: uniqueId.slice(0, missionSeparatorIndex),
+			stageId: uniqueId.slice(missionSeparatorIndex + 1)
+		});
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
@@ -94,19 +106,20 @@ export class Stage extends Entity<StageDataType, string> {
 	}
 
 	public async generateTasks(payload: unknown, context: EntityExecutionContext) {
-		const input = StageLocatorSchema.parse(payload);
+		StageInstanceInputSchema.parse(payload);
+		const missionId = this.readMissionId();
 		const service = await loadMissionRegistry(context);
-		const mission = await service.loadRequiredMission(input, context);
+		const mission = await service.loadRequiredMission({ missionId }, context);
 		try {
-			Stage.requireData(await mission.buildMission(), input.stageId);
-			await mission.generateTasksForStage(input.stageId as MissionStageId);
+			Stage.requireData(await mission.buildMission(), this.stageId);
+			await mission.generateTasksForStage(this.stageId as MissionStageId);
 			return StageCommandAcknowledgementSchema.parse({
 				ok: true,
 				entity: 'Stage',
 				method: 'generateTasks',
-				id: input.stageId,
-				missionId: input.missionId,
-				stageId: input.stageId,
+				id: this.stageId,
+				missionId,
+				stageId: this.stageId,
 				commandId: StageCommandIds.generateTasks
 			});
 		} finally {
@@ -136,6 +149,17 @@ export class Stage extends Entity<StageDataType, string> {
 		} finally {
 			mission.dispose();
 		}
+	}
+
+	private readMissionId(): string {
+		const entityId = EntityIdSchema.parse(this.id);
+		const separatorIndex = entityId.indexOf(':');
+		const uniqueId = entityId.slice(separatorIndex + 1);
+		const missionSeparatorIndex = uniqueId.indexOf('/');
+		if (missionSeparatorIndex <= 0 || missionSeparatorIndex === uniqueId.length - 1) {
+			throw new Error(`Stage entity id '${entityId}' is invalid.`);
+		}
+		return uniqueId.slice(0, missionSeparatorIndex);
 	}
 
 }

@@ -19,10 +19,12 @@ import type { EntityEventEnvelopeType } from '../entities/Entity/EntitySchema.js
 import {
 	entityCommandInvocationSchema,
 	entityFormInvocationSchema,
-	entityQueryInvocationSchema,
+	entityQueryInvocationSchema
+} from '../entities/Entity/EntityInvocation.js';
+import {
 	executeEntityCommandInDaemon,
 	executeEntityQueryInDaemon
-} from '../entities/Entity/EntityRemote.js';
+} from './DaemonEntityDispatcher.js';
 import {
 	PROTOCOL_VERSION,
 	type EventSubscription,
@@ -34,10 +36,15 @@ import {
 import { DaemonLogger } from './runtime/DaemonLogger.js';
 import type { AgentRuntimeDisposable } from './runtime/agent-execution/events.js';
 import { TerminalRegistry } from '../entities/Terminal/TerminalRegistry.js';
+import { ImpeccableLiveRegistry } from './impeccable/ImpeccableLiveRegistry.js';
 import { DaemonRuntimeSupervisor } from './runtime/DaemonRuntimeSupervisor.js';
-import { DaemonSurrealStore } from './runtime/DaemonSurrealStore.js';
 import { CodeIntelligenceService } from './runtime/code-intelligence/CodeIntelligenceService.js';
+import { AgentConnectionTester } from './runtime/agent-execution/AgentConnectionTester.js';
 import { getDefaultAgentExecutionRegistry, type AgentExecutionRegistry } from './runtime/agent-execution/AgentExecutionRegistry.js';
+import { createSurrealEntityFactory, type Factory } from '../lib/factory.js';
+import { SurrealDatabase } from '../lib/database/SurrealDatabase.js';
+import { Repository } from '../entities/Repository/Repository.js';
+import { System } from '../entities/System/System.js';
 import {
 	OpenMissionMcpRegisterAccessInputSchema,
 	OpenMissionMcpCallToolInputSchema,
@@ -97,17 +104,34 @@ export async function startOpenMissionDaemon(options: OpenMissionDaemonStartOpti
 	const missionRegistry = new MissionRegistryClass({ logger });
 	const agentExecutionRegistry = getDefaultAgentExecutionRegistry({ logger });
 	const openMissionMcpServer = new OpenMissionMcpServer({ agentExecutionRegistry, logger });
+	const impeccableLiveRegistry = new ImpeccableLiveRegistry({
+		daemonProcessId: process.pid,
+		startedAt,
+	});
 	const runtimeSupervisor = new DaemonRuntimeSupervisor({
 		daemonProcessId: process.pid,
 		startedAt,
 		terminalRegistry,
 		agentExecutionRegistry,
-		openMissionMcpServer
+		openMissionMcpServer,
+		impeccableLiveRegistry
 	});
-	const surrealStore = DaemonSurrealStore.forCodeRoot({ rootPath: surfaceRootPath, logger });
-	const codeIntelligenceService = new CodeIntelligenceService({ surrealStore });
+	const surrealDatabase = SurrealDatabase.sharedForExternal({ logger });
+	const entityFactory = createSurrealEntityFactory({ database: surrealDatabase });
+	const codeIntelligenceService = new CodeIntelligenceService({ entityFactory });
 	agentExecutionRegistry.configure({ openMissionMcpServer });
-	const ipcServer = createDaemonIpcServer({ startedAt, socketPath, missionRegistry, openMissionMcpServer, runtimeSupervisor, agentExecutionRegistry, surrealStore, codeIntelligenceService });
+	const ipcServer = createDaemonIpcServer({
+		startedAt,
+		socketPath,
+		missionRegistry,
+		openMissionMcpServer,
+		impeccableLiveRegistry,
+		runtimeSupervisor,
+		agentExecutionRegistry,
+		entityFactory,
+		surrealDatabase,
+		codeIntelligenceService
+	});
 	const notificationSources = startEntityEventSources(ipcServer.broadcastEvent, terminalRegistry);
 	let shutdownPromise: Promise<void> | undefined;
 	let closeResolve: (() => void) | undefined;
@@ -121,9 +145,14 @@ export async function startOpenMissionDaemon(options: OpenMissionDaemonStartOpti
 	let startupCompleted = false;
 
 	try {
-		await surrealStore.start();
+		await surrealDatabase.start();
+		await bootstrapDaemonPersistence({
+			surfacePath: surfaceRootPath,
+			entityFactory,
+			logger
+		});
 		await runtimeSupervisor.start();
-		await missionRegistry.hydrateDaemonMissions({ surfacePath: surfaceRootPath });
+		await missionRegistry.hydrateDaemonMissions({ surfacePath: surfaceRootPath, entityFactory });
 		logger.info('Open Mission daemon hydration completed.');
 		if (!isNamedPipePath(socketPath)) {
 			await fs.rm(socketPath, { force: true }).catch(() => undefined);
@@ -139,7 +168,7 @@ export async function startOpenMissionDaemon(options: OpenMissionDaemonStartOpti
 		startupCompleted = true;
 	} finally {
 		if (!startupCompleted) {
-			await surrealStore.stop();
+			await surrealDatabase.stop();
 			missionRegistry.dispose();
 			notificationSources.dispose();
 			await runtimeSupervisor.releaseAll();
@@ -173,7 +202,7 @@ export async function startOpenMissionDaemon(options: OpenMissionDaemonStartOpti
 		shutdownPromise = (async () => {
 			logger.info('Open Mission daemon shutting down.');
 			missionRegistry.dispose();
-			await surrealStore.stop();
+			await surrealDatabase.stop();
 			agentExecutionRegistry.dispose();
 			notificationSources.dispose();
 			await runtimeSupervisor.releaseAll();
@@ -221,9 +250,11 @@ export function createDaemonIpcServer(input: {
 	socketPath?: string;
 	missionRegistry: MissionRegistry;
 	openMissionMcpServer: OpenMissionMcpServer;
+	impeccableLiveRegistry: ImpeccableLiveRegistry;
 	runtimeSupervisor?: DaemonRuntimeSupervisor;
 	agentExecutionRegistry?: AgentExecutionRegistry;
-	surrealStore?: DaemonSurrealStore;
+	entityFactory: Factory;
+	surrealDatabase?: SurrealDatabase;
 	codeIntelligenceService?: CodeIntelligenceService;
 }): DaemonIpcServer {
 	const sockets = new Set<net.Socket>();
@@ -300,9 +331,11 @@ async function handleRequestLine(
 		socketPath?: string;
 		missionRegistry: MissionRegistry;
 		openMissionMcpServer: OpenMissionMcpServer;
+		impeccableLiveRegistry: ImpeccableLiveRegistry;
 		runtimeSupervisor?: DaemonRuntimeSupervisor;
 		agentExecutionRegistry?: AgentExecutionRegistry;
-		surrealStore?: DaemonSurrealStore;
+		entityFactory: Factory;
+		surrealDatabase?: SurrealDatabase;
 		codeIntelligenceService?: CodeIntelligenceService;
 	},
 	subscriptionsBySocket: Map<net.Socket, EventSubscription[]>,
@@ -336,9 +369,11 @@ async function createDaemonResponse(
 		socketPath?: string;
 		missionRegistry: MissionRegistry;
 		openMissionMcpServer: OpenMissionMcpServer;
+		impeccableLiveRegistry: ImpeccableLiveRegistry;
 		runtimeSupervisor?: DaemonRuntimeSupervisor;
 		agentExecutionRegistry?: AgentExecutionRegistry;
-		surrealStore?: DaemonSurrealStore;
+		entityFactory: Factory;
+		surrealDatabase?: SurrealDatabase;
 		codeIntelligenceService?: CodeIntelligenceService;
 	}
 ): Promise<Response> {
@@ -360,9 +395,10 @@ async function createDaemonResponseUnchecked(
 		socketPath?: string;
 		missionRegistry: MissionRegistry;
 		openMissionMcpServer: OpenMissionMcpServer;
+		impeccableLiveRegistry: ImpeccableLiveRegistry;
 		runtimeSupervisor?: DaemonRuntimeSupervisor;
 		agentExecutionRegistry?: AgentExecutionRegistry;
-		surrealStore?: DaemonSurrealStore;
+		surrealDatabase?: SurrealDatabase;
 		codeIntelligenceService?: CodeIntelligenceService;
 	}
 ): Promise<Response> {
@@ -408,10 +444,30 @@ async function createDaemonResponseUnchecked(
 						...(context.runtimeSupervisor ? { runtimeSupervision: context.runtimeSupervisor.readSnapshot() } : {}),
 						loadedMissionCount: missionSummary.loadedMissionCount,
 						loadedRepositoryCount: missionSummary.loadedRepositoryCount,
-						...(context.surrealStore ? { surreal: context.surrealStore.readStatus() } : {}),
+						...(context.surrealDatabase ? { surreal: context.surrealDatabase.readStatus() } : {}),
 						activeAgentExecutionCount: agentExecutionSummary?.activeAgentExecutionCount ?? 0,
 						...(agentExecutionSummary ? { agentExecutionSummary } : {})
 					}
+				})
+			};
+		}
+		case 'impeccable-live.resolve': {
+			return {
+				type: 'response',
+				id: request.id,
+				ok: true,
+				result: await context.impeccableLiveRegistry.ensureSession({
+					params: request.params
+				})
+			};
+		}
+		case 'impeccable-live.stop': {
+			return {
+				type: 'response',
+				id: request.id,
+				ok: true,
+				result: await context.impeccableLiveRegistry.stopSession({
+					params: request.params
 				})
 			};
 		}
@@ -443,7 +499,7 @@ async function createDaemonResponseUnchecked(
 				ok: true,
 				result: await executeEntityQueryInDaemon(
 					entityQueryInvocationSchema.parse(request.params),
-					createEntityExecutionContext(request, context.missionRegistry, context.codeIntelligenceService)
+					createEntityExecutionContext(request, context.missionRegistry, context.entityFactory, context.codeIntelligenceService)
 				)
 			};
 		case 'entity.command': {
@@ -457,7 +513,7 @@ async function createDaemonResponseUnchecked(
 				ok: true,
 				result: await executeEntityCommandInDaemon(
 					invocation,
-					createEntityExecutionContext(request, context.missionRegistry, context.codeIntelligenceService)
+					createEntityExecutionContext(request, context.missionRegistry, context.entityFactory, context.codeIntelligenceService)
 				)
 			};
 		}
@@ -531,15 +587,52 @@ function matchesSubscription(subscription: EventSubscription, event: EntityEvent
 function createEntityExecutionContext(
 	request: Request,
 	missionRegistry: MissionRegistry,
+	entityFactory: Factory,
 	codeIntelligenceService?: CodeIntelligenceService
 ) {
 	return {
 		surfacePath: resolveSurfacePath(request.surfacePath),
 		missionRegistry,
+		entityFactory,
 		agentExecutionRegistry: getDefaultAgentExecutionRegistry(),
+		agentConnectionTester: new AgentConnectionTester(),
 		...(codeIntelligenceService ? { codeIntelligenceService } : {}),
 		...(request.authToken?.trim() ? { authToken: request.authToken.trim() } : {})
 	};
+}
+
+async function bootstrapDaemonPersistence(input: {
+	surfacePath: string;
+	entityFactory: Factory;
+	logger: {
+		info(message: string, metadata?: Record<string, unknown>): void;
+		warn(message: string, metadata?: Record<string, unknown>): void;
+	};
+}): Promise<void> {
+	const context = {
+		surfacePath: input.surfacePath,
+		entityFactory: input.entityFactory
+	};
+	const system = await System.read({}, context);
+	const currentPackageVersion = await System.readCurrentPackageVersion();
+	if (system.packageVersion !== currentPackageVersion) {
+		input.logger.warn('Open Mission daemon detected a system package version mismatch.', {
+			systemId: system.id,
+			storedPackageVersion: system.packageVersion,
+			currentPackageVersion
+		});
+	}
+
+	const discoveredRepositories = await Repository.discoverConfiguredRepositories();
+	for (const repository of discoveredRepositories) {
+		await input.entityFactory.save(Repository, repository.toStorage());
+	}
+
+	input.logger.info('Open Mission daemon persistence bootstrap completed.', {
+		systemId: system.id,
+		repositoryCount: discoveredRepositories.length,
+		packageVersion: system.packageVersion
+	});
 }
 
 function startEntityEventSources(
@@ -778,5 +871,5 @@ function readSocketOverride(argv: string[]): string | undefined {
 }
 
 function resolveSurfacePath(surfacePath: string | undefined): string {
-	return surfacePath?.trim() || process.env['OPEN_MISSION_SURFACE_PATH']?.trim() || process.cwd();
+	return surfacePath?.trim() || process.cwd();
 }

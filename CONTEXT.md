@@ -50,15 +50,15 @@ The filesystem root path of a Repository. Because configured filesystem discover
 _Avoid_: workspace root, mission worktree root
 
 **Repository control state**:
-Durable repository-scoped Open Mission system state stored under `.mission/`.
+Durable repository-scoped Open Mission system state stored under `.open-mission/`. It may include repository settings and workflow law. The tracked Repository also owns the canonical Open Mission database at `.open-mission/database/`.
 _Avoid_: workspace state, editor state, surface state
 
 **Repository settings document**:
-The `.mission/settings.json` file that stores operator-editable Repository control state values such as Mission worktree root, instruction paths, skills paths, and default Agent adapter preferences.
+The `.open-mission/settings.json` file that stores operator-editable Repository control state values such as Mission worktree root, instruction paths, skills paths, default Agent adapter preferences, and repository-owned Mission storage configuration.
 _Avoid_: config blob, workspace settings, surface preferences
 
 **Repository workflow settings**:
-The repository-level workflow defaults stored under the `workflow` section of `.mission/settings.json` and snapshotted into Mission runtime data when a draft Mission becomes ready.
+The repository-level workflow defaults stored under the `workflow` section of `.open-mission/settings.json` and snapshotted into Mission runtime data when a draft Mission becomes ready.
 _Avoid_: Mission workflow snapshot, surface settings, daemon-local preference, adapter metadata
 
 **Control mode**:
@@ -92,7 +92,7 @@ _Avoid_: GitHub adapter, repository adapter
 ### Mission Execution
 
 **Mission dossier**:
-The tracked mission history and control record for one Mission, stored under `.mission/missions/<mission-id>/` on a Mission branch ref. It includes Mission runtime data, the Mission runtime event log, Mission artifacts, task definitions, and other tracked Mission control records.
+The tracked mission history and control record for one Mission, stored under `.open-mission/missions/<mission-id>/` on a Mission branch ref. It includes Mission runtime data, the Mission runtime event log, Mission artifacts, task definitions, and other tracked Mission control records.
 _Avoid_: mission folder, mission data, mission state folder
 
 **Mission runtime data**:
@@ -124,7 +124,7 @@ The optional Mission metadata naming the GitHub account currently responsible fo
 _Avoid_: Mission owner, organization member, permission grant, billing account
 
 **Mission stage**:
-A derived Mission phase whose status comes from the progress of its Mission tasks.
+A first-class Mission phase Entity whose status comes from the progress of its Mission tasks and workflow law.
 _Avoid_: folder, independent state, milestone
 
 **Artifact**:
@@ -157,11 +157,11 @@ _Avoid_: job, step, todo
 
 **Agent execution**:
 A daemon-owned in-memory Entity instance representing one running or recoverable execution of one Agent under an explicit owning Entity reference. It owns execution identity, process lifecycle, structured messages, accepted signals, journal state, and serializable Entity state. A Terminal may be attached as an optional transport, but it is not the Agent execution.
-_Avoid_: chat, terminal, env-based routing, AgentExecutor-owned lifecycle
+_Boundary_: owner routing uses the Agent execution owner reference; Terminal remains optional transport.
 
 **Agent execution process**:
 The OS process or process-like provider session owned by an Agent execution instance, including launch command, args, working directory, process id when available, exit state, and process lifecycle operations.
-_Avoid_: terminal, runtime session, adapter lifecycle owner, AgentExecutor process
+_Boundary_: process lifecycle belongs to AgentExecution; adapter translation and Terminal transport stay separate.
 
 **Agent execution owner reference**:
 The daemon-owned owner discriminator and owner id for one Agent execution. Supported owner kinds are system, repository, mission, task, and artifact.
@@ -203,12 +203,12 @@ _Avoid_: Mission artifact, Agent execution message Entity, context state, single
 The append-only semantic journal for one Agent execution. It records accepted Agent execution messages, normalized observations, policy decisions, state effects, owner effects, and projection material so AgentExecution state can be replayed deterministically. It is separate from raw terminal recordings and Mission workflow event logs.
 _Avoid_: terminal transcript, chat state, Mission workflow event log, Agent execution message Entity
 
-**Agent execution fact**:
-A daemon-observed structured fact about an Agent execution, such as an artifact read, artifact write, tool invocation, tool result, filesystem change, or structured provider event. An Agent execution fact is not an Agent-authored signal and not raw transport evidence.
-_Avoid_: inferred terminal text, Agent claim, UI hint
+**Daemon-observed Agent execution observation**:
+A daemon-recorded observation about an Agent execution, such as an Artifact read, Artifact write, tool invocation, tool result, filesystem change, or structured provider event. It is an Agent execution observation with daemon authority, not an Agent-authored signal and not raw transport evidence.
+_Avoid_: separate fact model, inferred terminal text, Agent claim, UI hint
 
 **Agent execution transport evidence**:
-Raw or near-raw adapter, provider, or terminal material retained for audit and optional operator expansion, such as output chunks, stderr excerpts, provider payloads, or PTY snippets. Transport evidence is not semantic truth unless separately promoted into a journaled Agent execution fact or accepted observation.
+Raw or near-raw adapter, provider, or terminal material retained for audit and optional operator expansion, such as output chunks, stderr excerpts, provider payloads, or PTY snippets. Transport evidence is not semantic truth unless separately accepted as an Agent execution observation.
 _Avoid_: canonical replay state, inferred fact, chat message
 
 **Agent execution terminal recording**:
@@ -280,7 +280,7 @@ The daemon-owned local MCP server named `open-mission-mcp` that exposes Agent si
 _Avoid_: remote mission API, MCP-owned workflow, task session server, provider-specific signal model
 
 **Agent execution semantic operation**:
-A read-only daemon-owned operation exposed to one registered Agent execution through `open-mission-mcp`, such as Artifact reads, code search, symbol context, impact analysis, route impact, or tool context. It resolves authority from the Agent execution owner reference and launch location, validates operation input, delegates to the owning daemon service, returns structured context, and records a bounded Agent execution fact.
+A read-only daemon-owned operation exposed to one registered Agent execution through `open-mission-mcp`, such as Artifact reads, code search, symbol context, impact analysis, route impact, or tool context. It resolves authority from the Agent execution owner reference and launch location, validates operation input, delegates to the owning daemon service, returns structured context, and records a bounded daemon-observed Agent execution observation.
 _Avoid_: Entity command, raw repository API, workflow mutation, arbitrary filesystem tool, public MCP tool
 
 **Code root**:
@@ -295,9 +295,9 @@ _Avoid_: Entity storage records, Mission dossier, `.gitnexus` index, workflow tr
 The graph-shaped query model inside a Code intelligence index, containing code files, code symbols, code relations, code routes, code tools, code processes, code clusters, and index snapshot metadata. Its physical storage may use SurrealDB tables and relation records behind a Mission-owned graph store adapter, with SurrealQL schema generated from Mission-owned Zod schemas annotated with `@flying-pillow/zod-surreal` metadata.
 _Avoid_: raw SurrealDB client, public graph API, Entity relationship metadata, workflow graph, Repository code graph, Mission code graph
 
-**Code intelligence Agent execution fact**:
-A bounded Agent execution fact recording that an Agent execution used a code intelligence semantic operation, including the operation name, scoped index, query summary, result summary, staleness, and confidence metadata. It is audit material, not the full query result or source body.
-_Avoid_: transcript, full code dump, persistent index record, workflow event
+**Code intelligence Agent execution observation**:
+A bounded daemon-observed Agent execution observation recording that an Agent execution used a code intelligence semantic operation, including the operation name, scoped index, query summary, result summary, staleness, and confidence metadata. It is audit material, not the full query result or source body.
+_Avoid_: transcript, full code dump, persistent index record, workflow event, separate fact model
 
 **Agent message shorthand**:
 Operator-facing syntax that parses into an Agent execution message, such as a slash command in an external prompt field.
@@ -537,7 +537,7 @@ _Avoid_: workflow projection, stage projection
 - A **Mission runtime schema version** applies to the whole persisted Mission runtime data, not separately to **Agent execution journal** state or **Mission artifacts**.
 - A **Mission runtime migration**, if introduced by an explicit future decision, belongs to the daemon persistence layer and must run outside ordinary State store hydration.
 - A **Mission** has one or more **Mission stages**.
-- A **Mission stage** status is derived from its **Mission tasks**.
+- A **Mission stage** status is derived from its **Mission tasks** even when the **Mission stage** persists its own row data.
 - An **Artifact** is rooted at one filesystem root such as a **Repository root** or **Mission worktree root**.
 - An **Artifact** may exist without any **Mission** relationship.
 - A **Mission artifact** may belong to a **Mission**, a **Mission stage**, or a **Mission task**.
@@ -556,7 +556,7 @@ _Avoid_: workflow projection, stage projection
 - The **Agent execution journal** is the canonical ordered state/history for an **Agent execution**; raw **Agent execution logs** and terminal recordings remain separate audit material.
 - An **Agent execution log** is daemon-owned audit material, not an **Artifact** by default.
 - An **Agent execution semantic operation** belongs to one registered **Agent execution** and is authorized through that Agent execution's `open-mission-mcp` access.
-- An **Agent execution semantic operation** records a bounded **Agent execution fact** when it reads meaningful context.
+- An **Agent execution semantic operation** records a bounded daemon-observed **Agent execution observation** when it reads meaningful context.
 - A code intelligence semantic operation may read a **Code intelligence index** only for the **Code root** resolved from the Agent execution owner reference and launch location.
 - An **Agent-session artifact** may reference or extract from an **Agent execution log** when the daemon or operator promotes useful material into Mission work.
 - An **Agent execution message** describes a structured message supported by an Agent execution's Agent adapter.
@@ -654,7 +654,7 @@ _Avoid_: workflow projection, stage projection
 - Code intelligence indexes are rebuildable read models over Code roots and must report staleness when stale data could affect the answer.
 - Code graph SurrealQL DDL is generated from Mission-owned zod-surreal schemas; hand-written SurQL is not the canonical code graph schema.
 - Open Mission web may render a read-only visual representation of active Code graph snapshots after Agent-facing semantic operations are stable, but it must not own graph semantics, index lifecycle, root selection, or graph mutation.
-- Code intelligence Agent execution facts record bounded audit summaries of semantic operation use; full source bodies and high-volume graph results are returned only in operation responses when allowed, not stored wholesale in Agent execution facts.
+- Code intelligence Agent execution observations record bounded audit summaries of semantic operation use; full source bodies and high-volume graph results are returned only in operation responses when allowed, not stored wholesale in Agent execution journals.
 
 ### Mission Control Task List
 
@@ -730,7 +730,7 @@ _Avoid_: workflow projection, stage projection
 - "Mission" was used to mean both the product/system and a long-lived unit of work. Resolved: **Mission** means the unit of work; **Open Mission** means the product/runtime.
 - "Repository" can be confused with a checked-out mission worktree. Resolved: **Repository** means the base Git checkout, not a mission checkout.
 - "Branch" was used to mean both a Git ref and a checked-out worktree. Resolved: names or refs use **Ref**; local checked-out Git work uses **Mission worktree**; filesystem locations use **Root** or **Path**.
-- "Stage" can sound like a materialized folder or independently edited state. Resolved: **Mission stage** is derived from **Mission task** progress.
+- "Stage" can sound like a materialized folder or independently edited state. Resolved: **Mission stage** is a first-class Entity family whose status is derived from **Mission task** progress.
 - Entity schemas used entity-specific id field names such as `repositoryId` or `missionId`. Resolved: an **Entity schema** uses a canonical `id` field for the Entity's identity.
 - Entity behavior was described as if an outboard **Entity adapter** satisfied remote methods. Resolved: the **Entity class** is the behavior owner, while the **Entity contract** holds remote method metadata.
 - "Projection" was used for old coarse-grained mission synchronization, Open Mission pane data, and workflow-derived state. Resolved: **Projection** is legacy/transition vocabulary; use **System snapshot**, **Entity event**, **Open Mission app pane view**, **Mission control view**, or **Derived workflow state**.

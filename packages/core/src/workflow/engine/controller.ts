@@ -8,10 +8,10 @@ import type {
     AgentLaunchConfig,
     AgentCommand,
     AgentPrompt,
-    AgentExecutionReference,
-    AgentExecutionType
+    AgentExecutionReference
 } from '../../entities/AgentExecution/AgentExecutionSchema.js';
 import type { AgentExecutionSignalDecision } from '../../entities/AgentExecution/AgentExecutionSchema.js';
+import type { AgentExecutionRuntimeType } from '../../daemon/runtime/agent-execution/AgentExecutionRegistry.js';
 import {
     buildWorkflowTaskGenerationRequests,
     createWorkflowConfigurationSnapshot,
@@ -119,26 +119,26 @@ export class WorkflowController {
         return nextDocument;
     }
 
-    public listRuntimeAgentExecutions(): AgentExecutionType[] {
+    public listRuntimeAgentExecutions(): AgentExecutionRuntimeType[] {
         return this.requestExecutor.listRuntimeAgentExecutions();
     }
 
-    public getRuntimeAgentExecution(agentExecutionId: string): AgentExecutionType | undefined {
+    public getRuntimeAgentExecution(agentExecutionId: string): AgentExecutionRuntimeType | undefined {
         return this.requestExecutor.getRuntimeAgentExecution(agentExecutionId);
     }
 
     public applyRuntimeAgentExecutionSignalDecision(
         agentExecutionId: string,
         decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
-    ): AgentExecutionType | undefined {
+    ): AgentExecutionRuntimeType | undefined {
         return this.requestExecutor.applyRuntimeAgentExecutionSignalDecision(agentExecutionId, decision);
     }
 
-    public async attachRuntimeAgentExecution(reference: AgentExecutionReference): Promise<AgentExecutionType> {
+    public async attachRuntimeAgentExecution(reference: AgentExecutionReference): Promise<AgentExecutionRuntimeType> {
         return this.requestExecutor.reconcileExecution(reference);
     }
 
-    public async startRuntimeAgentExecution(config: AgentLaunchConfig): Promise<AgentExecutionType> {
+    public async startRuntimeAgentExecution(config: AgentLaunchConfig): Promise<AgentExecutionRuntimeType> {
         return this.requestExecutor.startExecution(config);
     }
 
@@ -424,7 +424,7 @@ function pickWorkflowPayloadSummary(payload: Record<string, unknown>): Record<st
         'reasonCode',
         'actor',
         'targetType',
-        'targetId',
+        'id',
         'autostart'
     ]) {
         const value = payload[key];

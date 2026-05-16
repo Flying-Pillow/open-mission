@@ -140,14 +140,16 @@ function normalizeResolvedOpenMissionConfig(rawConfig: unknown): OpenMissionConf
 	const enabledAgentAdapters = Array.isArray(candidate['enabledAgentAdapters']) && candidate['enabledAgentAdapters'].every((value) => typeof value === 'string')
 		? candidate['enabledAgentAdapters']
 		: undefined;
-	const defaultAgentMode = candidate['defaultAgentMode'];
+	const defaultAgentMode = candidate['defaultAgentMode'] === 'autonomous'
+		? 'print'
+		: candidate['defaultAgentMode'];
 	const defaultReasoningEffort = candidate['defaultReasoningEffort'];
 	const systemAgentSettings = parseSystemAgentSettings({
 		...(typeof candidate['defaultAgentAdapter'] === 'string'
 			? { defaultAgentAdapter: candidate['defaultAgentAdapter'] }
 			: {}),
 		...(enabledAgentAdapters ? { enabledAgentAdapters } : {}),
-		...(defaultAgentMode === 'interactive' || defaultAgentMode === 'autonomous'
+		...(defaultAgentMode === 'interactive' || defaultAgentMode === 'print'
 			? { defaultAgentMode }
 			: {}),
 		...(typeof candidate['defaultModel'] === 'string'

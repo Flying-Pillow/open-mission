@@ -284,9 +284,9 @@ async function spawnDaemonAdapter(options: {
 	const socketArgs = options.socketPath ? ['--socket', options.socketPath] : [];
 	const sourceEntry = path.join(packageRoot, 'src', 'daemon', 'open-missiond.ts');
 	const buildEntry = path.join(packageRoot, 'build', 'daemon', 'open-missiond.js');
+	const daemonWorkingDirectory = options.surfacePath?.trim() || packageRoot;
 	const env = {
 		...process.env,
-		...(options.surfacePath ? { OPEN_MISSION_SURFACE_PATH: options.surfacePath } : {}),
 		OPEN_MISSION_DAEMON_RUNTIME_MODE: runtimeMode,
 		...(runtimeMode === 'source'
 			? { NODE_OPTIONS: appendNodeCondition(process.env['NODE_OPTIONS'], 'typescript') }
@@ -302,7 +302,7 @@ async function spawnDaemonAdapter(options: {
 			'pnpm',
 			['--dir', packageRoot, 'exec', 'tsx', '--tsconfig', path.join(packageRoot, 'tsconfig.json'), sourceEntry, 'run', ...socketArgs],
 			{
-				cwd: packageRoot,
+				cwd: daemonWorkingDirectory,
 				env,
 				stdio,
 				detached: true,
@@ -314,7 +314,7 @@ async function spawnDaemonAdapter(options: {
 	}
 
 	const child = spawn(process.execPath, [buildEntry, 'run', ...socketArgs], {
-		cwd: packageRoot,
+		cwd: daemonWorkingDirectory,
 		env,
 		stdio,
 		detached: true,

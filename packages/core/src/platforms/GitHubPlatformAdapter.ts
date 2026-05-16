@@ -492,6 +492,7 @@ export class GitHubPlatformAdapter {
 			.filter(Boolean)[0];
 
 		return {
+			type: 'task',
 			issueId: payload.number,
 			title: payload.title,
 			body: payload.body?.trim() || 'Issue body not captured yet.',

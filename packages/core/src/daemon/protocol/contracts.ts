@@ -1,11 +1,13 @@
 import type { EntityEventEnvelopeType } from '../../entities/Entity/EntitySchema.js';
 
-export const PROTOCOL_VERSION = 32;
+export const PROTOCOL_VERSION = 35;
 
 export type Method =
 	| 'ping'
 	| 'event.subscribe'
 	| 'system.status'
+	| 'impeccable-live.resolve'
+	| 'impeccable-live.stop'
 	| 'open-mission-mcp.registerAccess'
 	| 'open-mission-mcp.listTools'
 	| 'open-mission-mcp.callTool'
@@ -23,6 +25,8 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'ping': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'event.subscribe': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'system.status': { includeSurfacePath: true, workspaceRoute: 'none' },
+	'impeccable-live.resolve': { includeSurfacePath: true, workspaceRoute: 'none' },
+	'impeccable-live.stop': { includeSurfacePath: true, workspaceRoute: 'none' },
 	'open-mission-mcp.registerAccess': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'open-mission-mcp.listTools': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'open-mission-mcp.callTool': { includeSurfacePath: false, workspaceRoute: 'none' },

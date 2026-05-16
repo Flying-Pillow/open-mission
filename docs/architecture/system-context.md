@@ -10,7 +10,7 @@ Open Mission coordinates five things:
 
 | Area | Owner |
 | --- | --- |
-| Repository control state | Repository Entity and .mission files |
+| Repository control state | Repository Entity and `.open-mission` files |
 | Live Mission behavior | Running Mission instance |
 | Runtime state and dispatch | Open Mission daemon |
 | Operator interaction | Open Mission surfaces |

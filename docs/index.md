@@ -33,7 +33,7 @@ Instead of one open-ended session working directly on your checkout, Open Missio
 5. launch Agent executions with bounded context
 6. verify, audit, and deliver with evidence
 
-Open Mission is the operator surface for that flow. Workflow Control shows the legal commands, Agent Execution hosts live execution, and artifacts stay in view.
+Open Mission is the operator surface for that flow. Workflow Control shows the legal commands, Agent Execution hosts owner-scoped live execution, and artifacts stay in view.
 
 ## What Mission Protects
 
@@ -65,7 +65,7 @@ For the broader motivation, read [AI Technical Debt](core-workflows/ai-technical
 - **Mission**: a long-lived unit of engineering work with a brief, workflow state, artifacts, tasks, and agent executions.
 - **Running Mission instance**: the daemon-owned Entity that applies workflow law while a Mission is live.
 - **Mission artifact**: a tracked operator-facing file produced or consumed by the Mission.
-- **Agent execution**: a daemon-managed execution attached to a Mission or Mission task.
+- **Agent execution**: a daemon-owned run of one Agent under an explicit System, Repository, Mission, Task, or Artifact owner reference.
 - **Open Mission**: the operator surface for reading and steering the daemon-owned system.
 
 The full domain glossary lives in CONTEXT.md. ADRs explain why the architecture is shaped this way.

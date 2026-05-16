@@ -1,106 +1,91 @@
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AgentExecution } from '../../entities/AgentExecution/AgentExecution.js';
 import { createSurrealEntityFactory } from '../factory.js';
+import { SurrealDatabase } from './SurrealDatabase.js';
 import {
-    resolveMissionOwnedDatabasePath,
-    resolveOwnerDatabasePath,
-    resolveRepositoryDatabasePath,
-    resolveSystemDatabasePath,
-    SurrealDatabase
-} from './SurrealDatabase.js';
+    clearSurrealTables,
+    createTestSurrealDatabase,
+    TEST_SURREAL_DATABASE,
+    TEST_SURREAL_NAMESPACE
+} from './SurrealTestDatabase.js';
 
 describe('SurrealEntityStore', () => {
-    it('persists EntityFactory records in repository .open-mission/database SurrealKV storage', async () => {
-        const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-surreal-entity-'));
-        const database = SurrealDatabase.forOwner({
-            ownerEntity: 'Repository',
-            repositoryRootPath: rootPath,
-            namespace: 'open_mission_entity_store_test',
-            database: 'mission'
-        });
+    it('persists EntityFactory records in the external SurrealDB database', async () => {
+        const database = createTestSurrealDatabase();
         const factory = createSurrealEntityFactory({ database });
-        const data = AgentExecution.createData({
+        const first = AgentExecution.createData({
             ownerEntity: 'Repository',
             ownerId: 'repository-1',
             agentId: 'agent-1',
             agentExecutionId: 'execution-1'
         });
+        const second = AgentExecution.createData({
+            ownerEntity: 'Repository',
+            ownerId: 'repository-2',
+            agentId: 'agent-2',
+            agentExecutionId: 'execution-2'
+        });
 
         try {
-            const created = await factory.create(AgentExecution, data);
+            await clearSurrealTables(database, ['agent_execution_journal', 'agent_execution']);
+            const created = await factory.create(AgentExecution, first);
+            await factory.create(AgentExecution, second);
             const read = await factory.read(AgentExecution, created.id);
-            const records = await factory.find(AgentExecution);
+            const records = await factory.find(AgentExecution, {
+                where: {
+                    field: 'ownerId',
+                    operator: '=',
+                    value: 'repository-1'
+                },
+                start: 0,
+                limit: 1,
+                pagination: true
+            });
 
             expect(database.readStatus()).toMatchObject({
                 available: true,
-                engine: 'surrealkv',
-                namespace: 'open_mission_entity_store_test',
-                database: 'mission',
-                storagePath: resolveRepositoryDatabasePath(rootPath)
+                engine: 'remote',
+                namespace: TEST_SURREAL_NAMESPACE,
+                database: TEST_SURREAL_DATABASE
             });
-            await expect(fs.stat(resolveRepositoryDatabasePath(rootPath))).resolves.toBeDefined();
-            expect(read?.toData()).toEqual(data);
-            expect(records.map((record) => record.id)).toContain(data.id);
+            expect(read?.toData()).toEqual(first);
+            expect(records.count).toBe(1);
+            expect(records.start).toBe(0);
+            expect(records.total).toBe(1);
+            expect(records.entities.map((record) => record.id)).toEqual([first.id]);
 
-            await factory.remove(AgentExecution, data.id);
-            await expect(factory.read(AgentExecution, data.id)).resolves.toBeUndefined();
+            await factory.remove(AgentExecution, first.id);
+            await factory.remove(AgentExecution, second.id);
+            await expect(factory.read(AgentExecution, first.id)).resolves.toBeUndefined();
         } finally {
+            await clearSurrealTables(database, ['agent_execution_journal', 'agent_execution']);
             await database.stop();
-            await fs.rm(rootPath, { recursive: true, force: true });
         }
     });
 
-    it('resolves database paths from owner context', () => {
-        expect(resolveSystemDatabasePath('/config/open-mission')).toBe(path.join('/config/open-mission', 'database'));
-        expect(resolveOwnerDatabasePath({
-            ownerEntity: 'Repository',
-            repositoryRootPath: '/repo'
-        })).toBe(resolveRepositoryDatabasePath('/repo'));
-        expect(resolveOwnerDatabasePath({
-            ownerEntity: 'Mission',
-            missionRootPath: '/repo',
-            missionId: 'mission-1'
-        })).toBe(resolveMissionOwnedDatabasePath('/repo', 'mission-1'));
-        expect(resolveMissionOwnedDatabasePath('/repo', 'mission-1'))
-            .toBe(path.join('/repo', '.open-mission', 'missions', 'mission-1', 'database'));
-    });
-
-    it('reuses shared database drivers per owner location', async () => {
-        const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-surreal-shared-'));
-        const repositoryDatabase = SurrealDatabase.sharedForOwner({
-            ownerEntity: 'Repository',
-            repositoryRootPath: rootPath,
-            namespace: 'open_mission_shared_connection_test'
-        });
-        const sameRepositoryDatabase = SurrealDatabase.sharedForOwner({
-            ownerEntity: 'Repository',
-            repositoryRootPath: rootPath,
-            namespace: 'open_mission_shared_connection_test'
-        });
-        const missionDatabase = SurrealDatabase.sharedForOwner({
-            ownerEntity: 'Mission',
-            missionRootPath: rootPath,
-            missionId: 'mission-1',
-            namespace: 'open_mission_shared_connection_test'
+    it('reuses shared database drivers per external database scope', async () => {
+        const sharedDatabase = createTestSurrealDatabase({ shared: true });
+        const sameSharedDatabase = createTestSurrealDatabase({ shared: true });
+        const differentDatabase = SurrealDatabase.sharedForExternal({
+            namespace: TEST_SURREAL_NAMESPACE,
+            database: 'other'
         });
 
         try {
-            expect(sameRepositoryDatabase).toBe(repositoryDatabase);
-            expect(missionDatabase).not.toBe(repositoryDatabase);
+            expect(sameSharedDatabase).toBe(sharedDatabase);
+            expect(differentDatabase).not.toBe(sharedDatabase);
 
-            await repositoryDatabase.start();
-            await sameRepositoryDatabase.start();
-            expect(sameRepositoryDatabase.readStatus()).toMatchObject({
+            await sharedDatabase.start();
+            await sameSharedDatabase.start();
+            expect(sameSharedDatabase.readStatus()).toMatchObject({
                 available: true,
-                storagePath: resolveRepositoryDatabasePath(rootPath)
+                engine: 'remote',
+                namespace: TEST_SURREAL_NAMESPACE,
+                database: TEST_SURREAL_DATABASE
             });
         } finally {
-            await repositoryDatabase.stop();
-            await missionDatabase.stop();
-            await fs.rm(rootPath, { recursive: true, force: true });
+            await sharedDatabase.stop();
+            await differentDatabase.stop();
         }
     });
 });

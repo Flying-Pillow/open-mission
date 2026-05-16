@@ -87,6 +87,8 @@ export type TaskArtifactWrite = {
 	agent: MissionTaskAgent;
 };
 
+export type MissionTaskAgent = string;
+
 export type ResolvedMission = {
 	missionDir: string;
 	descriptor: MissionDescriptor;
@@ -585,6 +587,10 @@ export class MissionDossierFilesystem {
 		return path.posix.join('agent-journals', `${encodeURIComponent(agentExecutionId)}.interaction.jsonl`);
 	}
 
+	public getAgentExecutionJournalRelativePath(agentExecutionId: string): string {
+		return this.getMissionAgentJournalRelativePath(agentExecutionId);
+	}
+
 	public getMissionTerminalRecordingMetadataRelativePath(agentExecutionId: string): string {
 		return path.posix.join('terminal-recordings', `${encodeURIComponent(agentExecutionId)}.metadata.json`);
 	}
@@ -607,6 +613,10 @@ export class MissionDossierFilesystem {
 			return undefined;
 		}
 		return resolvedLogPath;
+	}
+
+	public resolveAgentExecutionJournalPath(missionDir: string, agentJournalPath: string): string | undefined {
+		return this.resolveMissionAgentJournalPath(missionDir, agentJournalPath);
 	}
 
 	public getMissionTerminalRecordingMetadataPath(missionDir: string, agentExecutionId: string): string {

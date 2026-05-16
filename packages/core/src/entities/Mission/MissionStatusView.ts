@@ -2,6 +2,7 @@ import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_STAGE_FOLDERS,
+	type MissionArtifactKey,
 	type MissionStageId
 } from '../../workflow/mission/manifest.js';
 import { DEFAULT_WORKFLOW_VERSION } from '../../workflow/mission/workflow.js';
@@ -33,7 +34,7 @@ type MissionStatusView = {
 		tasks: Array<WorkflowStateData['runtime']['tasks'][number] & {
 			agentAdapter?: string;
 			model?: string;
-			reasoningEffort?: string;
+			reasoningEffort?: TaskDossierRecordType['reasoningEffort'];
 			autostart?: boolean;
 		}>;
 		gates: WorkflowStateData['runtime']['gates'];
@@ -94,18 +95,27 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 		workflow: {
 			lifecycle: input.document.runtime.lifecycle,
 			...(currentStageId ? { currentStageId } : {}),
-			tasks: hydratedWorkflowTasks.map((task) => ({
-				...task,
+			tasks: hydratedWorkflowTasks.map((task) => {
+				const {
+					agentAdapter,
+					model,
+					reasoningEffort,
+					...runtimeTask
+				} = task;
+
+				return {
+					...runtimeTask,
 				title: projectedTasksById.get(task.taskId)?.subject ?? task.title,
-				...(task.agentAdapter?.trim() ? { agentAdapter: task.agentAdapter.trim() } : {}),
-				...(task.model?.trim() ? { model: task.model.trim() } : {}),
-				...(task.reasoningEffort?.trim() ? { reasoningEffort: task.reasoningEffort.trim() } : {}),
+					...(agentAdapter?.trim() ? { agentAdapter: agentAdapter.trim() } : {}),
+					...(model?.trim() ? { model: model.trim() } : {}),
+					...(reasoningEffort ? { reasoningEffort } : {}),
 				autostart: task.runtime.autostart,
 				dependsOn: [...task.dependsOn],
 				context: (task.context ?? []).map((contextArtifact) => ({ ...contextArtifact })),
 				waitingOnTaskIds: [...task.waitingOnTaskIds],
 				runtime: { ...task.runtime }
-			})),
+				};
+			}),
 			gates: input.document.runtime.gates.map((gate) => ({
 				...gate,
 				reasons: [...gate.reasons]
@@ -180,7 +190,7 @@ async function buildWorkflowStageStatuses(
 		const runtimeTasksById = new Map(runtimeTasks.map((task, index) => [task.taskId, { task, index }] as const));
 		const fileTasks = await input.adapter.listTaskStates(input.missionDir, stageId).catch(() => []);
 		const fileTaskIds = new Set(fileTasks.map((task) => task.taskId));
-		const tasks = [];
+		const tasks: StageStatusViewType['tasks'] = [];
 
 		for (const fileTask of fileTasks) {
 			const runtimeTaskEntry = runtimeTasksById.get(fileTask.taskId);
@@ -197,7 +207,7 @@ async function buildWorkflowStageStatuses(
 			tasks.push({
 				...fileTask,
 				waitingOn: [...fileTask.waitingOn],
-				status: 'pending'
+				status: 'pending' as const
 			});
 		}
 
@@ -234,7 +244,7 @@ async function collectMissionArtifactPaths(input: {
 	adapter: MissionDossierFilesystem;
 	missionDir: string;
 }): Promise<Record<string, string>> {
-	const entries = await Promise.all(Object.keys(MISSION_ARTIFACTS).map(async (artifactKey) => {
+	const entries = await Promise.all((Object.keys(MISSION_ARTIFACTS) as MissionArtifactKey[]).map(async (artifactKey) => {
 		const record = await input.adapter.readArtifactRecord(input.missionDir, artifactKey);
 		const exists = await input.adapter.artifactExists(input.missionDir, artifactKey);
 		return exists && record?.filePath ? [artifactKey, record.filePath] as const : undefined;

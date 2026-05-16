@@ -16,14 +16,14 @@ The central product requirement is:
 AgentExecution interaction journal -> AgentExecution projection -> Open Mission timeline UI
 ```
 
-Open Mission must render a projection derived from AgentExecution semantic state, AgentExecution journal records, and live runtime snapshot overlays. It must not interpret raw terminal output, local component state, or provider-specific events as semantic interaction truth.
+Open Mission renders a projection derived from AgentExecution semantic state, AgentExecution journal records, and live runtime snapshot overlays. Raw terminal output, local component state, and provider-specific events remain evidence or presentation material until AgentExecution accepts semantic meaning.
 
 The AgentExecution projection must stay aligned with the two phase-one registries defined by the interaction journal specification:
 
 - the journal record registry owns top-level journal record families, record discrimination, schema validation, and replay routing.
 - the signal registry owns `observation.recorded.signal` payload variants, signal descriptors, and signal-specific projection behavior.
 
-Open Mission consumes the resulting AgentExecution projection. It does not duplicate either registry in component code.
+Open Mission consumes the resulting AgentExecution projection. Component code renders projection primitives supplied by the AgentExecution-owned registries.
 
 ## Problem
 
@@ -56,15 +56,15 @@ The projection must allow Open Mission to present:
 
 The first implementation should preserve the existing operator workflow while improving the semantic rendering of current `timelineItems`. The target model is a Mission execution timeline with chat-like conversation regions inside it.
 
-## Non-Goals
+## Scope Boundaries
 
-- Do not modify AgentExecution journal authority or journal record schemas in Open Mission.
-- Do not make Open Mission chat, timeline, browser state, or component state authoritative.
-- Do not parse raw terminal output into semantic UI truth.
-- Do not require a full virtualized timeline engine before the existing chat surface evolves.
-- Do not require filesystem, git, artifact, or diff projection support before backend journal replay and idempotency are stable.
-- Do not create owner-specific timeline models for Mission, Task, Repository, Artifact, or System scopes.
-- Do not introduce provider-specific UI primitives for Copilot, Claude, Codex, OpenCode, or any other Agent.
+- AgentExecution owns journal authority and journal record schemas.
+- Open Mission chat, timeline, browser state, and component state remain projections and presentation state.
+- Terminal output appears as inspectable evidence or terminal snippets after backend projection supplies that material.
+- The existing chat surface can evolve incrementally before a full virtualized timeline engine exists.
+- Filesystem, git, artifact, and diff projection support follow backend journal replay and idempotency stability.
+- System, Repository, Mission, Task, and Artifact scopes share the same AgentExecution timeline model.
+- Provider-specific presentation appears through AgentAdapter descriptors or terminal evidence, while Open Mission primitives stay provider-neutral.
 
 ## Product Principles
 
@@ -74,15 +74,15 @@ Open Mission presents an AgentExecution timeline. Conversation is one timeline r
 
 ### Projection Before Component
 
-Open Mission components should render projection primitives and behavior classes. They should not infer domain meaning directly from journal record internals or terminal text.
+Open Mission components render projection primitives and behavior classes supplied by AgentExecution-owned replay rather than inferring domain meaning from journal record internals or terminal text.
 
 ### Registry-Driven Semantics
 
-Projection semantics come from AgentExecution-owned replay and registries. The journal record registry decides which record families exist and how replay dispatches them. The signal registry decides which structured signal types exist, what descriptors are advertised to Agents, and how signals project into operator-facing material. Open Mission may adapt projection items for layout, but it must not maintain a parallel switch table for journal record or signal meaning.
+Projection semantics come from AgentExecution-owned replay and registries. The journal record registry decides which record families exist and how replay dispatches them. The signal registry decides which structured signal types exist, what descriptors are advertised to Agents, and how signals project into operator-facing material. Open Mission adapts projection items for layout while semantic mapping remains registry-driven.
 
 ### Intelligent Timeline, Not Journal List
 
-Open Mission must not render journal records as a flat chronological list. Journal records are source material for a composed operator experience: grouped progress, collapsible reasoning summaries, synchronized terminal evidence, streaming diffs, review surfaces, replay controls, and navigation landmarks.
+Open Mission renders a composed operator experience rather than a raw journal row list: grouped progress, collapsible reasoning summaries, synchronized terminal evidence, streaming diffs, review surfaces, replay controls, and navigation landmarks.
 
 ### Terminal Is Inspectable, Not Primary
 
@@ -90,7 +90,7 @@ Terminal output is an execution viewport, runtime substrate, and audit surface. 
 
 ### Durable And Live Facts Stay Distinct
 
-Journal-derived items are durable projection material. Live runtime snapshot data is an overlay. Open Mission may compose both in one view, but it must not present live-only runtime facts as replayable truth.
+Journal-derived items are durable projection material. Live process data is an overlay. Open Mission may compose both in one view, with live-only material visibly marked as live or provisional.
 
 ### Attention Has A Stronger Shape Than Chat
 

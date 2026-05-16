@@ -3,7 +3,7 @@ import type {
 	EntityFormInvocation,
 	EntityQueryInvocation,
 	EntityRemoteResult
-} from '../../entities/Entity/EntityRemote.js';
+} from '../../entities/Entity/EntityInvocation.js';
 import { DaemonClient } from './DaemonClient.js';
 
 export class DaemonEntityApi {

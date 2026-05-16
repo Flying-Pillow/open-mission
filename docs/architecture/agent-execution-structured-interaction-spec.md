@@ -8,7 +8,7 @@ description: Temporary working spec for owner-addressed Agent execution messages
 
 ## Temporary Agent Execution Structured Interaction Spec
 
-> Current authority: this temporary spec contains pre-convergence runtime and AgentExecutor wording. Where it conflicts with `CONTEXT.md`, ADR-0006.01, ADR-0006.05, ADR-0006.06, or ADR-0006.10 as updated on 2026-05-13, follow the newer rule: `AgentExecution` is the canonical in-memory Entity instance and owner of the Agent execution process; MCP/stdout/provider output are input channels; `Terminal` is optional transport; `AgentExecutor` is not canonical ownership vocabulary.
+> Current authority: `AgentExecution` is the canonical in-memory Entity instance and owner of the Agent execution process. MCP, stdout, and provider output are input channels. `Terminal` is optional transport. `AgentExecutionRegistry` is daemon-internal lookup and process-handle plumbing.
 
 This is the umbrella working implementation spec for the Agent execution structured interaction architecture described by ADR-0006.05 and extended by ADR-0006.06.
 
@@ -18,7 +18,7 @@ It is temporary on purpose. It exists so future implementation sessions can cont
 
 The task is to implement a clear architecture for how an Agent execution communicates with Mission through the Entity that owns its scope. The current `@mission::` marker path is useful source material for parser behavior, validation, and tests.
 
-The current code is useful evidence. It has parsers, policy checks, terminal observation, runtime messages, AgentExecution snapshots, and workflow integration. It is not authoritative where it conflicts with ADR-0006.05 or the OOD Entity model. Any current module that keeps AgentExecutor as the semantic owner of Task, Mission, Repository, or Artifact meaning is implementation material to reshape, not architecture to preserve.
+The current code is useful evidence. It has parsers, policy checks, terminal observation, AgentExecution messages, AgentExecution state, and workflow integration. The target ownership model keeps scoped Task, Mission, Repository, and Artifact meaning in the owning Entity path, with narrow private capabilities behind AgentExecution for launch and IO mechanics.
 
 The desired architecture is an Entity-addressed runtime conversation:
 
@@ -39,10 +39,10 @@ The implementation must make the available structured interaction inspectable be
 - ADR-0001.03: Entity classes own behavior.
 - ADR-0001.05: Entity commands are the canonical operator mutation surface.
 - ADR-0006.04: prompt-scoped Agent execution signals are the current transport baseline.
-- ADR-0006.01: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
+- ADR-0006.01: Agent, AgentAdapter, AgentExecution, AgentExecutionRegistry, and Terminal vocabulary.
 - ADR-0006.05: structured Agent execution interaction vocabulary and owner-addressed signal model.
 - ADR-0006.06: `open-mission-mcp` is the daemon-owned MCP signal transport for Agent signals.
-- Mission MCP Server Spec: subordinate realization blueprint for the MCP transport. It must not redefine descriptor, observation, owner-routing, or idempotency semantics independently of this spec.
+- Mission MCP Server Spec: subordinate realization blueprint for the MCP transport. Descriptor, observation, owner-routing, and idempotency semantics come from this spec.
 
 ## Vocabulary To Implement
 
@@ -88,13 +88,13 @@ The stdout marker payload is strict JSON. The MCP tool payload is schema-validat
 
 ### Mission MCP Server
 
-The Mission MCP server is the daemon-owned local MCP service named `open-mission-mcp`. It materializes session-scoped tools from the Agent execution protocol descriptor and converts accepted MCP tool calls into Agent execution observations. It is a transport adapter into the same observation path as stdout markers, not an Entity, workflow owner, repository API, public automation API, or separate Agent execution model.
+The Mission MCP server is the daemon-owned local MCP service named `open-mission-mcp`. It materializes session-scoped tools from the Agent execution protocol descriptor and converts accepted MCP tool calls into Agent execution observations. It is a transport adapter into the same observation path as stdout markers.
 
 ### Agent Execution Observation
 
-An Agent execution observation is the daemon-normalized form of runtime output or structured Agent-authored transport input. Observations come from parsed Agent signal stdout markers, `open-mission-mcp` tool calls, provider-structured output, terminal diagnostics, or daemon-authored runtime facts.
+An Agent execution observation is the daemon-normalized form of process output or structured Agent-authored transport input. Observations come from parsed Agent signal stdout markers, `open-mission-mcp` tool calls, provider-structured output, terminal diagnostics, or daemon-observed semantic operation records.
 
-Observation handling belongs to the owning Entity path. AgentExecutor can observe and route. The owning Entity decides scoped meaning.
+Observation handling belongs to AgentExecution and the owning Entity path. The owning Entity decides scoped meaning. AgentExecutionRegistry only resolves the active AgentExecution and process handle.
 
 Agent execution observations are append-only and idempotent. An Agent signal event id may produce policy effects at most once for one AgentExecution, regardless of whether it arrived through stdout-marker delivery, `open-mission-mcp`, adapter replay, or a transport retry.
 
@@ -110,13 +110,13 @@ An Entity event is an accepted daemon-published fact. Agent stdout becomes an En
 
 ## Scan Findings From The First Implementation Pass
 
-The first implementation pass exposed three architecture smells that must not be carried forward:
+The first implementation pass exposed three architecture smells to resolve during convergence:
 
 - Marker prefixes were duplicated in daemon runtime code even though `AgentExecutionOwnerMarkerPrefixSchema` already owns the enum.
 - Runtime signal modules introduced terms such as `protocol-marker`, parser defaults, and signal decisions that were not part of ADR-0006.05 vocabulary.
 - The daemon `signals` folder mixed transport observation, payload parsing, policy evaluation, prompt rendering, and semantic state mutation in a way that obscured which behavior belongs to AgentExecution and which belongs to the owning Entity.
 
-Correction rule: the daemon may normalize output into observations, but it must not define owner prefixes, default an owner prefix, or become the semantic owner of scoped Mission, Task, Repository, or Artifact meaning.
+Correction rule: the daemon may normalize output into observations. Owner prefixes come from the AgentExecution descriptor, and scoped Mission, Task, Repository, or Artifact meaning stays with the owning Entity path.
 
 Current consolidation outcome:
 
@@ -171,21 +171,13 @@ The owning Entity owns:
 - mapping accepted observations to Entity events, AgentExecution updates, and workflow events
 - context operations that require owner knowledge of artifacts, tasks, repositories, or missions
 
-### AgentExecutor
+### AgentExecution And Registry Boundary
 
-AgentExecutor owns:
+AgentExecution owns launch intent, process state, selected signal delivery, terminal attachment state, message delivery attempts, provider output intake, stdout/stderr observation capture, MCP access registration state, and routing accepted observations to the owner path.
 
-- resolving Agent and AgentAdapter
-- selecting the Agent signal delivery for the execution
-- process launch and reconcile coordination
-- terminal attachment
-- provider output parsing
-- stdout/stderr observation capture
-- `open-mission-mcp` access registration coordination
-- routing observations to the owner path
-- delivery attempts for Agent execution messages
+AgentExecutionRegistry owns only active lookup and live process-handle registration for AgentExecution instances. It may route an inbound transport observation to the active AgentExecution by id; runtime data shape, session control, lifecycle ownership, and owner-specific command behavior stay outside the registry.
 
-AgentExecutor uses owner-Entity resolution and AgentAdapter transport capabilities to choose the selected Agent signal delivery before launch. It renders prompt-scoped instructions when the selected delivery is `stdout-marker`, registers MCP access when the selected delivery is `mcp-tool`, records the small AgentExecution transport state, and routes transport-neutral observations back through the same owner path.
+Private launch and IO helpers are named for their mechanical responsibility and stay behind AgentExecution. AgentExecution remains the public owner of execution lifecycle.
 
 ### AgentAdapter
 
@@ -198,7 +190,7 @@ AgentAdapter owns provider translation only:
 - provider-specific delivery mechanics when the adapter supports structured delivery
 - provider-specific MCP client configuration when the selected delivery is `mcp-tool`
 
-AgentAdapter capability, selected AgentExecution delivery, and provisioning result are separate facts. The adapter can support MCP while an execution selects stdout markers because of launch mode, Mission policy, detached runtime, remote execution, or loopback constraints. If the selected delivery is `mcp-tool` and provisioning fails, the launch fails; the daemon must not silently degrade that active execution into stdout markers.
+AgentAdapter capability, selected AgentExecution delivery, and provisioning result are separate values. The adapter can support MCP while an execution selects stdout markers because of launch mode, Mission policy, detached runtime, remote execution, or loopback constraints. If the selected delivery is `mcp-tool` and provisioning fails, the launch fails; stdout-marker delivery is selected only before launch through policy and operator intent.
 
 ### Terminal And TerminalRegistry
 
@@ -250,7 +242,7 @@ type AgentSignalDescriptor = {
 };
 ```
 
-The exact TypeScript names can change during implementation. The source of truth must be Zod schemas with inferred types. Use `deliveries`; do not retain the old singular `delivery` field as an alias.
+The exact TypeScript names can change during implementation. The source of truth is Zod schemas with inferred types. The descriptor field is `deliveries`.
 
 `mcp` descriptor metadata is not a place to store secrets, local endpoint data, or live session tokens. Those belong to daemon runtime access records and adapter launch preparation.
 
@@ -315,7 +307,7 @@ Replace the single Mission protocol parser with owner-addressed Agent signal par
 
 Parsing accepts the prefix from the descriptor for the active execution. It parses strict JSON, validates payload shape through the signal descriptor, preserves event id / observation id data, and returns Agent execution observations.
 
-Do not create a runtime default prefix. A missing descriptor prefix is a launch/routing error, not a parser choice.
+A missing descriptor prefix is a launch/routing error. Runtime parsing uses the active execution descriptor.
 
 The current parser and tests are useful source material, but the new parsing path should be descriptor-driven and should not duplicate marker-prefix literals owned by the AgentExecution schema.
 
@@ -330,11 +322,11 @@ Use the Mission MCP Server Spec for concrete MCP realization. Architecturally, `
 - route accepted calls into the same transport-neutral observation path as stdout markers
 - return acknowledgement status without claiming workflow completion
 
-It must not duplicate signal schemas, apply workflow state directly, or maintain a second execution model.
+It uses canonical signal schemas, routes workflow effects through owner behavior, and shares the AgentExecution model.
 
 ### 5. Route Observations Through Owner Entity
 
-Change AgentExecutor observation application so it routes observations from every declared transport to the owning Entity path.
+Change AgentExecution observation application so it routes observations from every declared transport to the owning Entity path.
 
 The owner path evaluates observation policy, updates AgentExecution state through accepted owner behavior, publishes Entity events, and emits workflow events through the Running Mission aggregate when scope rules require it.
 
@@ -352,7 +344,7 @@ After the owner-routed descriptor path works, remove or rewrite current code tha
 
 - hard-coded `@mission::` launch instruction generation as the universal signal source
 - signal payload lists duplicated outside descriptors
-- AgentExecutor direct semantic application of scoped observations
+- direct semantic application of scoped observations outside AgentExecution and the owning Entity path
 - Mission/task assumptions baked into AgentExecution identity where AgentExecutionScope should carry the owner context
 - runtime message descriptors stored as data without a matching signal descriptor source of truth
 - standalone runtime files that only restate schema, prefix, or descriptor facts already owned by AgentExecution
@@ -372,7 +364,7 @@ Minimum test coverage:
 - parser accepts only the active execution's owner prefix and descriptor payloads
 - parser rejects malformed, oversized, wrong-execution, duplicate, and unsupported markers
 - MCP tool calls reject malformed, oversized, wrong-execution, duplicate, unauthorized, and unsupported inputs
-- AgentExecutor routes stdout-marker and MCP observations to owner handling rather than applying scoped meaning directly
+- AgentExecution routes stdout-marker and MCP observations to owner handling rather than applying scoped meaning directly in transport code
 - Task-owned ready/completion/failure claims remain claims until owner workflow behavior accepts lifecycle changes
 - Open Mission reads message and signal descriptors from the same protocol source used for launch instructions
 

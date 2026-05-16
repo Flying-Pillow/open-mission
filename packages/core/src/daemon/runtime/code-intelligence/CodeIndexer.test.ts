@@ -35,21 +35,21 @@ describe('CodeIndexer', () => {
             const result = await new CodeIndexer().indexCodeRoot({ rootPath });
 
             expect(result.rootPath).toBe(rootPath);
-            expect(result.files.map((file) => file.path)).toEqual([
+            expect(result.objects.filter((object) => object.objectKind === 'file' || object.objectKind === 'document').map((object) => object.path)).toEqual([
                 '.gitignore',
                 'README.md',
                 'src/helper.ts',
                 'src/index.ts',
                 'src/tool.py'
             ]);
-            expect(result.files.map((file) => `${file.language}:${file.path}`)).toEqual([
-                'unknown:.gitignore',
-                'markdown:README.md',
-                'typescript:src/helper.ts',
-                'typescript:src/index.ts',
-                'python:src/tool.py'
+            expect(result.objects.filter((object) => object.objectKind === 'file' || object.objectKind === 'document').map((object) => `${object.objectKind}:${object.language}:${object.path}`)).toEqual([
+                'document:unknown:.gitignore',
+                'document:markdown:README.md',
+                'file:typescript:src/helper.ts',
+                'file:typescript:src/index.ts',
+                'file:python:src/tool.py'
             ]);
-            expect(result.symbols.map((symbol) => `${symbol.kind}:${symbol.name}:${symbol.filePath}`)).toEqual([
+            expect(result.objects.filter((object) => object.objectKind === 'symbol').map((object) => `${object.symbolKind}:${object.name}:${object.path}`)).toEqual([
                 'const:helper:src/helper.ts',
                 'interface:HelperOptions:src/helper.ts',
                 'class:AppService:src/index.ts',
@@ -57,9 +57,54 @@ describe('CodeIndexer', () => {
             ]);
             expect(result.relations).toEqual([
                 {
-                    fromFilePath: 'src/index.ts',
-                    kind: 'imports',
-                    target: './helper.js'
+                    inObjectKey: 'root',
+                    relationKind: 'contains',
+                    outObjectKey: 'path:.gitignore'
+                },
+                {
+                    inObjectKey: 'root',
+                    relationKind: 'contains',
+                    outObjectKey: 'path:README.md'
+                },
+                {
+                    inObjectKey: 'root',
+                    relationKind: 'contains',
+                    outObjectKey: 'path:src/helper.ts'
+                },
+                {
+                    inObjectKey: 'root',
+                    relationKind: 'contains',
+                    outObjectKey: 'path:src/index.ts'
+                },
+                {
+                    inObjectKey: 'root',
+                    relationKind: 'contains',
+                    outObjectKey: 'path:src/tool.py'
+                },
+                {
+                    inObjectKey: 'path:src/helper.ts',
+                    relationKind: 'defines',
+                    outObjectKey: 'symbol:src/helper.ts:const:helper:1'
+                },
+                {
+                    inObjectKey: 'path:src/helper.ts',
+                    relationKind: 'defines',
+                    outObjectKey: 'symbol:src/helper.ts:interface:HelperOptions:2'
+                },
+                {
+                    inObjectKey: 'path:src/index.ts',
+                    relationKind: 'imports',
+                    outObjectKey: 'path:src/helper.ts'
+                },
+                {
+                    inObjectKey: 'path:src/index.ts',
+                    relationKind: 'defines',
+                    outObjectKey: 'symbol:src/index.ts:class:AppService:2'
+                },
+                {
+                    inObjectKey: 'path:src/index.ts',
+                    relationKind: 'defines',
+                    outObjectKey: 'symbol:src/index.ts:function:runApp:3'
                 }
             ]);
             expect(result.rootFingerprint).toMatch(/^[a-f0-9]{64}$/u);

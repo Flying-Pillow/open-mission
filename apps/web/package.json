@@ -11,7 +11,7 @@
     "access": "public"
   },
   "scripts": {
-    "dev": "OPEN_MISSION_SURFACE_PATH=${OPEN_MISSION_SURFACE_PATH:-$(cd ../.. && pwd)} OPEN_MISSION_DAEMON_RUNTIME_MODE=${OPEN_MISSION_DAEMON_RUNTIME_MODE:-source} vp dev --host 0.0.0.0 --port 5174",
+    "dev": "OPEN_MISSION_REPOSITORY_ROOT=${OPEN_MISSION_REPOSITORY_ROOT:-$(cd ../.. && pwd)} OPEN_MISSION_DAEMON_RUNTIME_MODE=${OPEN_MISSION_DAEMON_RUNTIME_MODE:-source} vp dev --host 0.0.0.0 --port 5174",
     "build": "vp build",
     "preview": "vp preview",
     "prepare": "svelte-kit sync || echo ''",

@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Cookies } from '@sveltejs/kit';
+import { resolveSurfacePath } from './daemon/context.server';
 
 const LEGACY_GITHUB_AUTH_COOKIE_NAME = 'open_mission_github_auth_token';
 export const GITHUB_AUTH_SESSION_COOKIE_NAME = 'open_mission_github_auth_session';
@@ -856,7 +857,7 @@ function resolveGithubAuthSessionDirectory(): string {
         return configuredDirectory;
     }
 
-    const surfacePath = process.env['OPEN_MISSION_SURFACE_PATH']?.trim() || process.cwd();
+    const surfacePath = resolveSurfacePath();
     const surfaceHash = createHash('sha256').update(surfacePath).digest('hex').slice(0, 16);
     return path.join(tmpdir(), 'open-mission-web', 'github-auth', surfaceHash, 'sessions');
 }

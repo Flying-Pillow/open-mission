@@ -12,12 +12,12 @@ This temporary SPEC describes the implementation direction for ADR-0006.10 and t
 
 ## Authoritative Inputs
 
-- `CONTEXT.md`: canonical Mission vocabulary.
+- `CONTEXT.md`: canonical Open Mission vocabulary.
 - ADR-0006.03: runtime-defined Agent execution messages.
 - ADR-0001.05: Entity commands as canonical operator surface.
-- ADR-0006.01: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
-- ADR-0006.06: Mission MCP server Agent signal transport.
-- ADR-0006.08 and ADR-0006.13: AgentExecution interaction journal and typed journal ledger.
+- ADR-0006.01: Agent, AgentAdapter, AgentExecution, AgentExecutionRegistry, and Terminal vocabulary.
+- ADR-0006.06: Open Mission MCP server Agent messages transport.
+- ADR-0006.08: AgentExecution interaction journal.
 - ADR-0006.09: Agent execution semantic operations.
 - ADR-0006.10: structured-first Agent interaction with terminal capability.
 
@@ -29,7 +29,8 @@ Mission implements a structured-first AgentExecution interaction model with opti
 Open Mission Mission UI
   -> Entity commands / AgentExecution messages / semantic operation requests
   -> AgentExecution protocol descriptor
-  -> AgentExecutor delivery and runtime coordination
+  -> AgentExecution launch, process, and message handling
+  -> AgentExecutionRegistry lookup and process-handle registration
   -> AgentAdapter transport translation
   -> Agent runtime
   -> MCP tools / stdout markers / provider events / terminal evidence
@@ -37,7 +38,7 @@ Open Mission Mission UI
   -> AgentExecution journal and owner Entity effects
 ```
 
-The Terminal lane is attached to the AgentExecution runtime graph but is not the canonical command model.
+The Terminal lane is attached to the AgentExecution process as optional transport and evidence. It is not the canonical command model.
 
 ## Execution Postures
 
@@ -53,10 +54,10 @@ Use for:
 
 Requirements:
 
-- AgentExecution snapshot declares terminal attachment and selected structured signal transport.
+- AgentExecution state declares terminal attachment and selected structured signal transport.
 - Mission UI prompt box sends AgentExecution messages, not raw terminal input.
 - Raw terminal pane remains available as an explicit native lane.
-- Semantic observations come from MCP, stdout markers, provider parsers, or daemon-normalized facts.
+- Semantic observations come from MCP, stdout markers, provider parsers, or daemon-normalized observations.
 
 ### Structured Headless
 
@@ -72,8 +73,8 @@ Use for:
 
 Requirements:
 
-- AgentExecution snapshot declares no operator terminal dependency.
-- Agent progress and operator-facing responses arrive through structured signals, provider parsers, or runtime facts.
+- AgentExecution state declares no operator terminal dependency.
+- Agent progress and operator-facing responses arrive through structured signals, provider parsers, or daemon-observed observations.
 - Mission UI can show useful progress without terminal scrollback.
 
 ### Native Terminal Escape Hatch
@@ -90,7 +91,7 @@ Use for:
 Requirements:
 
 - Terminal input is recorded as raw transport evidence.
-- Terminal input must not mutate Mission context or workflow state unless a structured path accepts an observation or command.
+- Terminal input is transport evidence; Mission context or workflow state changes only after a structured path accepts an observation or command.
 - UI labels the terminal lane as native/advanced when needed.
 
 ## Command Categories
@@ -114,11 +115,11 @@ Rules:
 - Parser output is a typed invocation.
 - Payloads use canonical schemas.
 - Open Mission may autocomplete and preview, but daemon/Entity boundaries validate.
-- Mission-native command names must not mirror provider-specific names unless the meaning is truly Mission-owned.
+- Mission-native command names express Mission-owned meaning. Provider-specific names stay adapter-scoped or terminal-only until they become stable Mission concepts.
 
-### Cross-Agent Runtime Command
+### Cross-Agent AgentExecution Message
 
-Owned by AgentExecution runtime message descriptors.
+Owned by AgentExecution message descriptors.
 
 Examples:
 
@@ -210,8 +211,8 @@ Slash command resolution should be a daemon-owned parse and validation path, wit
 Resolution order:
 
 1. Mission-native command registry.
-2. Active AgentExecution cross-agent runtime message descriptors.
-3. Active AgentExecution adapter-scoped runtime message descriptors.
+2. Active AgentExecution cross-agent message descriptors.
+3. Active AgentExecution adapter-scoped message descriptors.
 4. Terminal-only hint when the operator is focused in the Terminal lane.
 
 The parser returns one of:
@@ -222,7 +223,7 @@ The parser returns one of:
 - terminal-only raw input intent.
 - parse error with expected input shape.
 
-The parser must not silently fall through to raw terminal input from the Mission chat prompt. Terminal-only input requires Terminal focus or an explicit operator choice.
+The parser returns a terminal-only raw input intent only when the Terminal lane has focus or the operator explicitly chooses that path.
 
 ## Journaling Rules
 
@@ -232,7 +233,7 @@ Semantic journal records include:
 - context mutations accepted by Mission.
 - delivery attempts and delivery outcomes.
 - accepted Agent signals.
-- runtime facts produced by semantic operations.
+- daemon-observed observations produced by semantic operations.
 - owner Entity effects and workflow events where applicable.
 - command parse failures when they are operator-visible and relevant.
 
@@ -258,7 +259,7 @@ transport evidence becomes semantic truth only through a daemon-owned structured
 - Keep existing terminal-capable AgentExecution support.
 - Keep Mission UI prompt delivery structured.
 - Preserve semantic journal versus terminal recording separation.
-- Add execution posture terminology to snapshots when implementation work begins.
+- Add execution posture terminology to AgentExecution state when implementation work begins.
 
 ### Phase 2: Mission-Native Slash Commands
 

@@ -1,0 +1,18 @@
+DEFINE TABLE OVERWRITE code_object TYPE NORMAL SCHEMAFULL COMMENT "Canonical code graph object records.";
+DEFINE FIELD OVERWRITE contentHash ON TABLE code_object TYPE option<string> COMMENT "Optional content hash for file-like or document-like code graph objects.";
+DEFINE FIELD OVERWRITE endLine ON TABLE code_object TYPE option<int> COMMENT "Optional ending source line for this code graph object.";
+DEFINE FIELD OVERWRITE exported ON TABLE code_object TYPE option<bool> COMMENT "Optional exported flag for symbol code graph objects.";
+DEFINE FIELD OVERWRITE language ON TABLE code_object TYPE option<string> COMMENT "Optional detected language associated with this code graph object.";
+DEFINE FIELD OVERWRITE name ON TABLE code_object TYPE option<string> COMMENT "Optional bounded display or symbol name for this code graph object.";
+DEFINE INDEX OVERWRITE code_object_name_idx ON TABLE code_object FIELDS name;
+DEFINE FIELD OVERWRITE objectKind ON TABLE code_object TYPE string COMMENT "Canonical object kind for this code graph node.";
+DEFINE INDEX OVERWRITE code_object_objectkind_idx ON TABLE code_object FIELDS objectKind;
+DEFINE FIELD OVERWRITE path ON TABLE code_object TYPE option<string> COMMENT "Optional repository-relative path associated with this code graph object.";
+DEFINE INDEX OVERWRITE code_object_path_idx ON TABLE code_object FIELDS path;
+DEFINE FIELD OVERWRITE repositoryId ON TABLE code_object TYPE string COMMENT "Canonical Repository Entity id that owns this code graph object.";
+DEFINE FIELD OVERWRITE sizeBytes ON TABLE code_object TYPE option<int> COMMENT "Optional byte size for file-like or document-like code graph objects.";
+DEFINE FIELD OVERWRITE snapshotId ON TABLE code_object TYPE string COMMENT "Canonical CodeGraphSnapshot Entity id that owns this code graph object.";
+DEFINE FIELD OVERWRITE startLine ON TABLE code_object TYPE option<int> COMMENT "Optional starting source line for this code graph object.";
+DEFINE FIELD OVERWRITE symbolKind ON TABLE code_object TYPE option<string> COMMENT "Optional symbol subtype when the object kind is symbol.";
+DEFINE INDEX OVERWRITE code_object_repository_snapshot_kind_path_idx ON TABLE code_object FIELDS repositoryId, snapshotId, objectKind, path;
+DEFINE INDEX OVERWRITE code_object_repository_snapshot_kind_name_idx ON TABLE code_object FIELDS repositoryId, snapshotId, objectKind, name;

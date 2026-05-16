@@ -16,12 +16,12 @@ import {
     MissionStorageSchema,
     MissionFindSchema,
     MissionCatalogEntrySchema,
+    MissionInstanceInputSchema,
     MissionDocumentSchema,
     MissionWorktreeSchema,
     MissionSchema,
     MissionControlSchema,
     MissionReadDocumentInputSchema,
-    MissionLocatorSchema,
     MissionWriteDocumentInputSchema,
     MissionCommandAcknowledgementSchema,
     MissionChangedEventSchema
@@ -30,6 +30,9 @@ import {
 export const MissionContract: EntityContractType = {
     entity: missionEntityName,
     entityClass: Mission,
+    inputSchema: MissionInstanceInputSchema,
+    storageSchema: MissionStorageSchema,
+    dataSchema: MissionSchema,
     properties: Object.fromEntries(
         Object.entries(MissionStorageSchema.shape).map(([name, schema]) => [
             name,
@@ -48,13 +51,13 @@ export const MissionContract: EntityContractType = {
         },
         read: {
             kind: 'query',
-            payload: MissionLocatorSchema,
+            payload: MissionInstanceInputSchema,
             result: MissionSchema,
             execution: 'entity'
         },
         readControl: {
             kind: 'query',
-            payload: MissionLocatorSchema,
+            payload: MissionInstanceInputSchema,
             result: MissionControlSchema,
             execution: 'entity'
         },
@@ -66,19 +69,19 @@ export const MissionContract: EntityContractType = {
         },
         readWorktree: {
             kind: 'query',
-            payload: MissionLocatorSchema,
+            payload: MissionInstanceInputSchema,
             result: MissionWorktreeSchema,
             execution: 'entity'
         },
         readTerminal: {
             kind: 'query',
-            payload: MissionLocatorSchema,
+            payload: MissionInstanceInputSchema,
             result: MissionTerminalSnapshotSchema,
             execution: 'entity'
         },
         pause: {
             kind: 'mutation',
-            payload: MissionLocatorSchema,
+            payload: MissionInstanceInputSchema,
             result: MissionCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -89,7 +92,7 @@ export const MissionContract: EntityContractType = {
         },
         resume: {
             kind: 'mutation',
-            payload: MissionLocatorSchema,
+            payload: MissionInstanceInputSchema,
             result: MissionCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -100,7 +103,7 @@ export const MissionContract: EntityContractType = {
         },
         restartQueue: {
             kind: 'mutation',
-            payload: MissionLocatorSchema,
+            payload: MissionInstanceInputSchema,
             result: MissionCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -115,7 +118,7 @@ export const MissionContract: EntityContractType = {
         },
         deliver: {
             kind: 'mutation',
-            payload: MissionLocatorSchema,
+            payload: MissionInstanceInputSchema,
             result: MissionCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -136,7 +139,7 @@ export const MissionContract: EntityContractType = {
         },
         ensureTerminal: {
             kind: 'mutation',
-            payload: MissionLocatorSchema,
+            payload: MissionInstanceInputSchema,
             result: MissionTerminalSnapshotSchema,
             execution: 'entity'
         },

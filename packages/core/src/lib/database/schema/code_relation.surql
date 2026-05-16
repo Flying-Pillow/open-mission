@@ -1,0 +1,12 @@
+DEFINE TABLE OVERWRITE code_relation TYPE RELATION FROM code_object TO code_object SCHEMAFULL COMMENT "Canonical code graph relation records.";
+DEFINE FIELD OVERWRITE in ON TABLE code_relation TYPE record<code_object> COMMENT "Canonical CodeObject Entity id at the IN endpoint of this relation.";
+DEFINE FIELD OVERWRITE isExport ON TABLE code_relation TYPE option<bool> COMMENT "Optional flag showing whether this relation is export-scoped.";
+DEFINE FIELD OVERWRITE isTypeOnly ON TABLE code_relation TYPE option<bool> COMMENT "Optional flag showing whether this relation only applies in type space.";
+DEFINE FIELD OVERWRITE order ON TABLE code_relation TYPE option<int> COMMENT "Optional deterministic order for ordered code graph relations.";
+DEFINE FIELD OVERWRITE out ON TABLE code_relation TYPE record<code_object> COMMENT "Canonical CodeObject Entity id at the OUT endpoint of this relation.";
+DEFINE FIELD OVERWRITE relationKind ON TABLE code_relation TYPE string COMMENT "Canonical relation kind for this code graph edge.";
+DEFINE INDEX OVERWRITE code_relation_relationkind_idx ON TABLE code_relation FIELDS relationKind;
+DEFINE FIELD OVERWRITE repositoryId ON TABLE code_relation TYPE string COMMENT "Canonical Repository Entity id that owns this code graph relation.";
+DEFINE FIELD OVERWRITE snapshotId ON TABLE code_relation TYPE string COMMENT "Canonical CodeGraphSnapshot Entity id that owns this code graph relation.";
+DEFINE FIELD OVERWRITE weight ON TABLE code_relation TYPE option<number> COMMENT "Optional bounded weight for weighted code graph relations.";
+DEFINE INDEX OVERWRITE code_relation_repository_snapshot_in_out_idx ON TABLE code_relation FIELDS repositoryId, snapshotId, in, out, relationKind;

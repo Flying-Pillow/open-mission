@@ -78,18 +78,57 @@ describe('DaemonRuntimeSupervisor', () => {
         expect(snapshot.owners).toContainEqual({
             kind: 'agent-execution',
             ownerId: 'mission-123',
-            agentExecutionId: 'execution-1',
-            scope: { kind: 'mission', missionId: 'mission-123' }
+            agentExecutionId: 'execution-1'
         });
-        expect(snapshot.relationships).toContainEqual({
-            parent: { kind: 'mission', missionId: 'mission-123' },
-            child: {
-                kind: 'agent-execution',
-                ownerId: 'mission-123',
-                agentExecutionId: 'execution-1',
-                scope: { kind: 'mission', missionId: 'mission-123' }
-            },
-            relationship: 'owns-agent-execution'
+    });
+
+    it('merges daemon-owned Impeccable live leases into the runtime supervision graph', () => {
+        const supervisor = new DaemonRuntimeSupervisor({
+            daemonProcessId: 4242,
+            startedAt: '2026-05-10T00:00:00.000Z',
+            terminalRegistry: {
+                readRuntimeSupervisionSnapshot: () => ({
+                    daemonProcessId: 4242,
+                    startedAt: '2026-05-10T00:00:00.000Z',
+                    owners: [],
+                    relationships: [],
+                    leases: []
+                }),
+                dispose: vi.fn()
+            } as never,
+            impeccableLiveRegistry: {
+                readRuntimeSnapshot: () => ({
+                    daemonProcessId: 4242,
+                    startedAt: '2026-05-10T00:00:00.000Z',
+                    owners: [{ kind: 'mission', missionId: 'mission-7' }],
+                    relationships: [{
+                        parent: { kind: 'mission', missionId: 'mission-7' },
+                        child: { kind: 'runtime-lease', leaseId: 'impeccable-live:mission:mission-7' },
+                        relationship: 'owns-runtime-lease'
+                    }],
+                    leases: [{
+                        leaseId: 'impeccable-live:mission:mission-7',
+                        kind: 'process',
+                        owner: { kind: 'mission', missionId: 'mission-7' },
+                        acquiredAt: '2026-05-10T00:00:10.000Z',
+                        state: 'active',
+                        processId: 8123,
+                        metadata: {
+                            origin: 'http://127.0.0.1:8400'
+                        }
+                    }]
+                }),
+                dispose: vi.fn().mockResolvedValue(undefined)
+            }
         });
+
+        const snapshot = supervisor.readSnapshot();
+
+        expect(snapshot.owners).toContainEqual({ kind: 'mission', missionId: 'mission-7' });
+        expect(snapshot.leases).toContainEqual(expect.objectContaining({
+            leaseId: 'impeccable-live:mission:mission-7',
+            processId: 8123,
+            state: 'active'
+        }));
     });
 });

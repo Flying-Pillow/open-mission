@@ -22,4 +22,22 @@ Command views are read results. They advertise what is currently available for a
 
 This keeps Open Mission thin. The surface renders commands; Entity classes decide what commands mean.
 
+## Dependency Direction
+
+Entity inheritance has a strict dependency direction. Generic Entity infrastructure is a parent abstraction and must not import concrete Entity children, concrete Entity contracts, daemon registries, runtime services, adapters, terminal runtime modules, code intelligence services, or provider implementations.
+
+The allowed direction is:
+
+```text
+daemon / host / adapter layer
+ -> Entity contracts
+ -> concrete Entity classes
+ -> Entity schemas
+ -> generic Entity infrastructure
+```
+
+Concrete contract catalogues, daemon capability injection, registry lookup, and post-command runtime behavior belong in daemon-owned dispatch modules. They do not belong in `entities/Entity` generic infrastructure.
+
+`EntityExecutionContext` is an invocation envelope. It is not a daemon service locator. The base Entity module may define generic invocation fields only; daemon-owned capabilities must be attached and validated at daemon or concrete Entity seams without making the base class import daemon types.
+
 Agent executions do not receive a separate agent-only command vocabulary. Surfaces present daemon-published Entity command views, and Agent terminal output may only make advisory state claims through strict Mission protocol markers.

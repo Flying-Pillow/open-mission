@@ -5,14 +5,15 @@ import {
     SystemAgentSettingsSchema,
     SystemConfigureSchema,
     SystemDataSchema,
-    SystemReadSchema
+    SystemReadSchema,
+    SystemStorageSchema
 } from './SystemSchema.js';
 
 export const SystemContract: EntityContractType = {
     entity: systemEntityName,
     entityClass: System,
     inputSchema: SystemReadSchema,
-    storageSchema: SystemDataSchema,
+    storageSchema: SystemStorageSchema,
     dataSchema: SystemDataSchema,
     methods: {
         read: {

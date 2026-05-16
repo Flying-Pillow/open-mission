@@ -10,7 +10,8 @@ import { Agent } from '../Agent/Agent.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { DaemonLogger } from '../../daemon/runtime/DaemonLogger.js';
 import { FakeAgentAdapter } from '../../daemon/runtime/agent-execution/testing/FakeAgentAdapter.js';
-import { AgentExecutionCommandIds, type AgentExecutionType } from '../AgentExecution/AgentExecutionSchema.js';
+import { AgentExecutionCommandIds } from '../AgentExecution/AgentExecutionSchema.js';
+import type { AgentExecutionRuntimeType } from '../../daemon/runtime/agent-execution/AgentExecutionRegistry.js';
 import { TaskCommandIds } from '../Task/TaskSchema.js';
 import { Mission } from './Mission.js';
 import { MissionCommandIds } from './MissionSchema.js';
@@ -74,7 +75,7 @@ describe('Mission', () => {
                 const events: string[] = [];
                 const agentMessages: string[] = [];
                 const consoleLines: string[] = [];
-                const agentExecutionStateChanges: AgentExecutionType[] = [];
+                const agentExecutionStateChanges: AgentExecutionRuntimeType[] = [];
                 mission.onDidAgentEvent((event) => {
                     events.push(event.type);
                     if (event.type === 'agent-message') {
@@ -163,7 +164,7 @@ describe('Mission', () => {
                 const cancelled = await mission.cancelAgentExecution(launched.agentExecutionId, 'operator cancelled');
 
                 expect(cancelled.lifecycleState).toBe('cancelled');
-                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getExecution().phase).toBe('cancelled');
+                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getSnapshot().phase).toBe('cancelled');
                 expect(mission.getAgentExecution(launched.agentExecutionId)?.lifecycleState).toBe('cancelled');
             } finally {
                 mission.dispose();
@@ -288,7 +289,7 @@ describe('Mission', () => {
                 const terminated = await mission.terminateAgentExecution(launched.agentExecutionId, 'operator terminated');
 
                 expect(terminated.lifecycleState).toBe('terminated');
-                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getExecution().phase).toBe('terminated');
+                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getSnapshot().phase).toBe('terminated');
                 expect(mission.getAgentExecution(launched.agentExecutionId)?.lifecycleState).toBe('terminated');
             } finally {
                 mission.dispose();
@@ -318,14 +319,14 @@ describe('Mission', () => {
                 }
 
                 const startCommand = (await mission.listCommands()).find(
-                    (command) => command.entity === 'Task' && command.targetId?.endsWith(`/${taskId}`) && command.commandId === TaskCommandIds.start
+                    (command) => command.entity === 'Task' && command.id?.endsWith(`/${taskId}`) && command.commandId === TaskCommandIds.start
                 );
                 expect(startCommand).toMatchObject({
                     commandId: TaskCommandIds.start,
                     available: true
                 });
                 expect((await mission.listCommands()).some(
-                    (command) => command.entity === 'Task' && command.targetId?.endsWith(`/${taskId}`) && command.commandId === 'task.launch'
+                    (command) => command.entity === 'Task' && command.id?.endsWith(`/${taskId}`) && command.commandId === 'task.launch'
                 )).toBe(false);
 
                 await mission.startTask(taskId, {
@@ -488,7 +489,7 @@ describe('Mission', () => {
                 await mission.completeTask(taskId);
 
                 const reworkCommand = (await mission.listCommands()).find(
-                    (command) => command.entity === 'Task' && command.targetId?.endsWith(`/${taskId}`) && command.commandId === 'task.rework'
+                    (command) => command.entity === 'Task' && command.id?.endsWith(`/${taskId}`) && command.commandId === 'task.rework'
                 );
                 expect(reworkCommand).toMatchObject({
                     commandId: 'task.rework',
@@ -633,7 +634,7 @@ describe('Mission', () => {
             try {
                 const reworkCommand = (await reloaded.listCommands()).find(
                     (command) => command.entity === 'Task'
-                        && command.targetId?.endsWith('/implementation/02-boundary-verify')
+                        && command.id?.endsWith('/implementation/02-boundary-verify')
                         && command.commandId === 'task.reworkFromVerification'
                 );
                 expect(reworkCommand).toMatchObject({
@@ -769,7 +770,7 @@ describe('Mission', () => {
             try {
                 const reworkCommand = (await reloaded.listCommands()).find(
                     (command) => command.entity === 'Task'
-                        && command.targetId?.endsWith('/implementation/02-boundary-verify')
+                        && command.id?.endsWith('/implementation/02-boundary-verify')
                         && command.commandId === 'task.reworkFromVerification'
                 );
                 expect(reworkCommand).toMatchObject({
@@ -871,7 +872,7 @@ describe('Mission', () => {
                     lifecycleState: 'running'
                 });
                 expect((await mission.listCommands()).some(
-                    (command) => command.entity === 'Task' && command.targetId?.endsWith(`/${taskId}`) && command.commandId === 'task.launch'
+                    (command) => command.entity === 'Task' && command.id?.endsWith(`/${taskId}`) && command.commandId === 'task.launch'
                 )).toBe(false);
             } finally {
                 mission.dispose();
@@ -985,7 +986,7 @@ describe('Mission', () => {
 
                 const completedAgentExecution = mission.getAgentExecution(launched.agentExecutionId);
                 expect(completedAgentExecution?.lifecycleState).toBe('completed');
-                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getExecution().status).toBe('completed');
+                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getSnapshot().status).toBe('completed');
             } finally {
                 mission.dispose();
             }
@@ -1233,7 +1234,7 @@ describe('Mission', () => {
 
                 const commands = await mission.readCommands();
                 expect(findAgentExecutionCommand(commands, launched.agentExecutionId, AgentExecutionCommandIds.cancel)?.available).toBe(true);
-                expect(commands.filter((command) => command.entity === 'AgentExecution' && command.targetId?.endsWith(`/${launched.agentExecutionId}`))).toHaveLength(1);
+                expect(commands.filter((command) => command.entity === 'AgentExecution' && command.id?.endsWith(`/${launched.agentExecutionId}`))).toHaveLength(1);
             } finally {
                 mission.dispose();
             }
@@ -1335,7 +1336,7 @@ function findMissionCommand(commands: TestOwnedCommand[], commandId: string) {
 function findAgentExecutionCommand(commands: TestOwnedCommand[], agentExecutionId: string, commandId: string) {
     return commands.find((command) =>
         command.entity === 'AgentExecution'
-        && command.targetId?.endsWith(`/${agentExecutionId}`)
+        && command.id?.endsWith(`/${agentExecutionId}`)
         && command.commandId === commandId
     );
 }

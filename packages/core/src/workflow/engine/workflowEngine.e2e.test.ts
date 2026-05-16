@@ -58,7 +58,6 @@ describe('workflow engine e2e', () => {
         } satisfies AgentPrompt);
         await controller.commandRuntimeAgentExecution(prdAgentExecutionId, {
             type: 'nudge',
-            reason: 'Continue'
         } satisfies AgentCommand);
 
         document = await controller.applyEvent(createMissionPausedEvent('2026-04-14T10:01:00.000Z'));

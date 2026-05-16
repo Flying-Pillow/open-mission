@@ -18,6 +18,37 @@ export TMP="${TMPDIR}"
 export PATH="${LOCAL_BIN_HOME}:${CARGO_HOME}/bin:${PATH}"
 export DOCKER_HOST="unix:///var/run/docker.sock"
 
+start_port_proxy() {
+  local listen_port="$1"
+  local target_host="$2"
+  local target_port="$3"
+  local proxy_name="$4"
+  local runtime_dir="${XDG_CACHE_HOME}/port-proxies"
+  local pid_file="${runtime_dir}/${proxy_name}.pid"
+  local log_file="${runtime_dir}/${proxy_name}.log"
+
+  mkdir -p "${runtime_dir}"
+
+  if [[ -f "${pid_file}" ]]; then
+    local existing_pid
+    existing_pid="$(cat "${pid_file}")"
+    if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" 2>/dev/null; then
+      return
+    fi
+    rm -f "${pid_file}"
+  fi
+
+  if command -v socat >/dev/null 2>&1; then
+    nohup bash -lc "
+      while true; do
+        socat TCP-LISTEN:${listen_port},bind=127.0.0.1,fork,reuseaddr TCP:${target_host}:${target_port} >>'${log_file}' 2>&1 || true
+        sleep 1
+      done
+    " >/dev/null 2>&1 &
+    echo $! > "${pid_file}"
+  fi
+}
+
 prepend_path_once() {
   local candidate_path="$1"
   if [[ -z "${candidate_path}" ]]; then
@@ -129,6 +160,10 @@ if [ ! -w "${TMPDIR}" ]; then
   exit 1
 fi
 
+echo "--- Starting devcontainer port proxies ---"
+start_port_proxy 8000 open-mission-surrealdb 8000 surrealdb
+start_port_proxy 8080 open-mission-surrealist 8080 surrealist
+
 echo "--- Toolchain versions ---"
 corepack enable --install-directory "${LOCAL_BIN_HOME}" pnpm
 corepack install
@@ -156,5 +191,5 @@ if [ -f /open-mission/apps/native/src-tauri/Cargo.toml ]; then
 fi
 
 echo "================================================================"
-echo "=== Mission dev container ready                              ==="
+echo "=== Open Mission dev container ready                         ==="
 echo "================================================================"

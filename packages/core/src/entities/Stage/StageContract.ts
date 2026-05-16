@@ -3,6 +3,7 @@ import { Stage } from './Stage.js';
 import {
     stageEntityName,
     StageLocatorSchema,
+    StageInstanceInputSchema,
     StageStorageSchema,
     StageDataSchema,
     StageCommandAcknowledgementSchema,
@@ -24,7 +25,7 @@ export const StageContract: EntityContractType = {
         },
         generateTasks: {
             kind: 'mutation',
-            payload: StageLocatorSchema,
+            payload: StageInstanceInputSchema,
             result: StageCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {

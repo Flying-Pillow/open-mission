@@ -9,6 +9,7 @@ import {
 } from '../Entity/EntitySchema.js';
 
 export const agentExecutionEntityName = 'AgentExecution' as const;
+export const agentExecutionJournalEntityName = 'AgentExecutionJournalRecord' as const;
 export const agentExecutionTableName = 'agent_execution' as const;
 export const agentExecutionJournalTableName = 'agent_execution_journal' as const;
 
@@ -24,6 +25,10 @@ export const AgentExecutionOwnerReferenceSchema = z.object({
     ownerEntity: AgentExecutionOwnerEntitySchema,
     ownerId: IdSchema
 }).strict();
+
+export const AgentExecutionLaunchModeSchema = z.enum(['interactive', 'print']);
+
+export const AgentExecutionReasoningEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh']);
 
 export const AgentExecutionLifecycleStateSchema = z.enum([
     'starting',
@@ -388,7 +393,7 @@ export const AgentExecutionMessageInputSchema = z.object({
     startsTurn: z.boolean().optional()
 }).strict();
 
-export const AgentExecutionSendMessageInputSchema = AgentExecutionLocatorSchema.extend({
+export const AgentExecutionSendMessageInputSchema = z.object({
     message: AgentExecutionMessageInputSchema
 }).strict();
 
@@ -398,14 +403,163 @@ export const AgentExecutionSendMessageAcknowledgementSchema = EntityCommandAckno
     accepted: z.literal(true)
 }).strict();
 
+export const AgentExecutionJournalPathSchema = z.string().trim().min(1);
+
+export const AgentExecutionTerminalRecordingPathSchema = z.string().trim().min(1);
+
+export const AgentExecutionTerminalHandleSchema = z.object({
+    terminalName: z.string().trim().min(1),
+    terminalPaneId: z.string().trim().min(1).optional()
+}).strict();
+
+export const AgentExecutionTransportReferenceSchema = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('terminal'),
+        terminalName: z.string().trim().min(1),
+        terminalPaneId: z.string().trim().min(1).optional()
+    }).strict()
+]);
+
+export const AgentPromptSourceSchema = z.enum(['operator', 'system', 'engine']);
+
+export const AgentPromptSchema = z.object({
+    source: AgentPromptSourceSchema,
+    text: z.string(),
+    title: z.string().trim().min(1).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional()
+}).strict();
+
+export const AgentCommandTypeSchema = z.enum(['interrupt', 'resume', 'checkpoint', 'nudge']);
+
+export const AgentCommandSchema = z.object({
+    type: AgentCommandTypeSchema
+}).strict();
+
+export const AgentExecutionResumeSchema = z.object({
+    mode: z.enum(['new', 'resume'])
+}).strict();
+
+export const AgentLaunchSpecificationDocumentSchema = z.object({
+    path: z.string().trim().min(1).optional(),
+    title: z.string().trim().min(1).optional(),
+    content: z.string().optional()
+}).strict();
+
+export const AgentLaunchSpecificationSchema = z.object({
+    summary: z.string().trim().min(1),
+    documents: z.array(AgentLaunchSpecificationDocumentSchema)
+}).strict();
+
+export const AgentExecutionScopeSchema = z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('system') }).strict(),
+    z.object({ kind: z.literal('repository'), repositoryRootPath: z.string().trim().min(1).optional() }).strict(),
+    z.object({ kind: z.literal('mission'), missionId: IdSchema }).strict(),
+    z.object({ kind: z.literal('task'), missionId: IdSchema, taskId: IdSchema, stageId: IdSchema.optional() }).strict(),
+    z.object({ kind: z.literal('artifact'), artifactId: IdSchema, missionId: IdSchema.optional(), taskId: IdSchema.optional() }).strict()
+]);
+
+export const AgentLaunchConfigSchema = z.object({
+    ownerId: IdSchema.optional(),
+    scope: AgentExecutionScopeSchema,
+    workingDirectory: z.string().trim().min(1),
+    specification: AgentLaunchSpecificationSchema,
+    requestedAdapterId: IdSchema.optional(),
+    agentId: IdSchema.optional(),
+    resume: AgentExecutionResumeSchema,
+    initialPrompt: AgentPromptSchema,
+    metadata: z.record(z.string(), z.unknown()).optional()
+}).strict();
+
+export const AgentExecutionReferenceSchema = z.object({
+    agentId: IdSchema,
+    agentExecutionId: IdSchema,
+    transport: AgentExecutionTransportReferenceSchema.optional()
+}).strict();
+
+export const AgentExecutionLaunchRequestSchema = z.object({
+    agentId: IdSchema,
+    taskId: IdSchema.optional(),
+    transportId: z.string().trim().min(1).optional(),
+    prompt: z.string(),
+    title: z.string().trim().min(1).optional(),
+    workingDirectory: z.string().trim().min(1),
+    model: z.string().trim().min(1).optional(),
+    reasoningEffort: AgentExecutionReasoningEffortSchema.optional(),
+    terminalName: z.string().trim().min(1).optional()
+}).strict();
+
+export const AgentExecutionObservationAddressSchema = z.object({
+    ownerId: IdSchema,
+    agentExecutionId: IdSchema
+}).strict();
+
+export const AgentExecutionObservationSchema = z.object({
+    kind: z.string().trim().min(1),
+    summary: z.string().trim().min(1).optional(),
+    payload: z.record(z.string(), z.unknown()).optional()
+}).strict();
+
+export const AgentExecutionSignalDecisionSchema = z.discriminatedUnion('action', [
+    z.object({ action: z.literal('accept') }).strict(),
+    z.object({ action: z.literal('pause') }).strict(),
+    z.object({ action: z.literal('reject'), reason: z.string().trim().min(1).optional() }).strict()
+]);
+
+export const AgentExecutionEventSubjectSchema = AgentExecutionLocatorSchema.extend({
+    entity: z.literal(agentExecutionEntityName)
+}).strict();
+
+export const AgentExecutionChangedSchema = z.object({
+    reference: AgentExecutionEventSubjectSchema,
+    data: AgentExecutionSchema
+}).strict();
+
+export const AgentExecutionTerminalSchema = z.object({
+    reference: AgentExecutionEventSubjectSchema,
+    terminalHandle: AgentExecutionTerminalHandleSchema.optional(),
+    chunk: z.string().optional(),
+    screen: z.string().optional(),
+    connected: z.boolean().optional(),
+    dead: z.boolean().optional(),
+    exitCode: z.number().int().nullable().optional()
+}).strict();
+
 export const AgentExecutionDataChangedEventSchema = z.object({
     type: z.literal('data.changed'),
     data: AgentExecutionSchema
 }).strict();
 
+export const AgentExecutionTerminalEventSchema = z.object({
+    type: z.literal('terminal'),
+    data: AgentExecutionTerminalSchema
+}).strict();
+
+export type AgentExecutionConsoleStateType = {
+    title?: string | undefined;
+    lines: string[];
+    promptOptions: string[] | null;
+    awaitingInput: boolean;
+    agentId?: string | undefined;
+    adapterLabel?: string | undefined;
+    agentExecutionId?: string | undefined;
+};
+
+export type AgentExecutionConsoleEventType =
+    | {
+        type: 'lines';
+        lines: string[];
+        state: AgentExecutionConsoleStateType;
+    }
+    | {
+        type: 'state.changed';
+        state: AgentExecutionConsoleStateType;
+    };
+
 export type AgentExecutionIdType = z.infer<typeof IdSchema>;
 export type AgentExecutionOwnerEntityType = z.infer<typeof AgentExecutionOwnerEntitySchema>;
 export type AgentExecutionOwnerReferenceType = z.infer<typeof AgentExecutionOwnerReferenceSchema>;
+export type AgentExecutionLaunchModeType = z.infer<typeof AgentExecutionLaunchModeSchema>;
+export type AgentExecutionReasoningEffortType = z.infer<typeof AgentExecutionReasoningEffortSchema>;
 export type AgentExecutionLifecycleStateType = z.infer<typeof AgentExecutionLifecycleStateSchema>;
 export type AgentExecutionAttentionStateType = z.infer<typeof AgentExecutionAttentionStateSchema>;
 export type AgentExecutionActivityStateType = z.infer<typeof AgentExecutionActivityStateSchema>;
@@ -434,3 +588,36 @@ export type AgentExecutionMessageInputType = z.infer<typeof AgentExecutionMessag
 export type AgentExecutionSendMessageInputType = z.infer<typeof AgentExecutionSendMessageInputSchema>;
 export type AgentExecutionSendMessageAcknowledgementType = z.infer<typeof AgentExecutionSendMessageAcknowledgementSchema>;
 export type AgentExecutionDataChangedEventType = z.infer<typeof AgentExecutionDataChangedEventSchema>;
+export type AgentExecutionTerminalEventType = z.infer<typeof AgentExecutionTerminalEventSchema>;
+export type AgentExecutionJournalPathType = z.infer<typeof AgentExecutionJournalPathSchema>;
+export type AgentExecutionTerminalRecordingPathType = z.infer<typeof AgentExecutionTerminalRecordingPathSchema>;
+export type AgentExecutionTerminalHandleType = z.infer<typeof AgentExecutionTerminalHandleSchema>;
+export type AgentExecutionTransportReferenceType = z.infer<typeof AgentExecutionTransportReferenceSchema>;
+export type AgentExecutionId = AgentExecutionIdType;
+export type AgentPromptSourceType = z.infer<typeof AgentPromptSourceSchema>;
+export type AgentPrompt = z.infer<typeof AgentPromptSchema>;
+export type AgentCommandType = z.infer<typeof AgentCommandTypeSchema>;
+export type AgentCommand = z.infer<typeof AgentCommandSchema>;
+export type AgentExecutionResumeType = z.infer<typeof AgentExecutionResumeSchema>;
+export type AgentLaunchSpecificationDocumentType = z.infer<typeof AgentLaunchSpecificationDocumentSchema>;
+export type AgentLaunchSpecificationType = z.infer<typeof AgentLaunchSpecificationSchema>;
+export type AgentExecutionScopeType = z.infer<typeof AgentExecutionScopeSchema>;
+export type AgentLaunchConfig = z.infer<typeof AgentLaunchConfigSchema>;
+export type AgentExecutionReference = z.infer<typeof AgentExecutionReferenceSchema>;
+export type AgentExecutionLaunchRequestType = z.infer<typeof AgentExecutionLaunchRequestSchema>;
+export type AgentExecutionObservationAddress = z.infer<typeof AgentExecutionObservationAddressSchema>;
+export type AgentExecutionObservation = z.infer<typeof AgentExecutionObservationSchema>;
+export type AgentExecutionSignalDecision = z.infer<typeof AgentExecutionSignalDecisionSchema>;
+export type AgentExecutionEventSubjectType = z.infer<typeof AgentExecutionEventSubjectSchema>;
+export type AgentExecutionChangedType = z.infer<typeof AgentExecutionChangedSchema>;
+export type AgentExecutionTerminalType = z.infer<typeof AgentExecutionTerminalSchema>;
+export type AgentExecutionPermissionRequestType = never;
+export type AgentExecutionTelemetryType = never;
+
+export const AgentExecutionCommandIds = {
+    cancel: 'agentExecution.cancel'
+} as const;
+
+export function isTerminalFinalStatus(status: AgentExecutionLifecycleStateType): boolean {
+    return status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'terminated';
+}

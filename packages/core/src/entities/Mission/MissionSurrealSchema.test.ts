@@ -1,12 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { Surreal } from 'surrealdb';
-import { createNodeEngines } from '@surrealdb/node';
 import { compileDefineStatements, compileSchema, defineModel } from '@flying-pillow/zod-surreal';
-import {
-    MissionSurrealStorageSchema,
-    StageSurrealStorageSchema,
-    TaskSurrealStorageSchema
-} from './MissionSurrealStorageSchema.js';
+import { Surreal } from 'surrealdb';
+import { SurrealDatabase } from '../../lib/database/SurrealDatabase.js';
+import { MissionStorageSchema } from './MissionSchema.js';
+import { StageStorageSchema } from '../Stage/StageSchema.js';
+import { TaskStorageSchema } from '../Task/TaskSchema.js';
 
 type TableInfo = {
     fields?: Record<string, string>;
@@ -26,19 +25,20 @@ async function infoForTable(db: Surreal, tableName: string): Promise<TableInfo> 
 }
 
 describe('Mission Surreal schema compilation', () => {
-    it('compiles Mission, Stage, and Task physical storage schemas into DDL accepted by embedded SurrealDB', async () => {
+    it('compiles Mission, Stage, and Task physical storage schemas into DDL accepted by external SurrealDB', async () => {
         const snapshot = compileSchema({
             models: [
-                defineModel({ name: 'Mission', schema: MissionSurrealStorageSchema }),
-                defineModel({ name: 'Stage', schema: StageSurrealStorageSchema }),
-                defineModel({ name: 'Task', schema: TaskSurrealStorageSchema })
+                defineModel({ name: 'Mission', schema: MissionStorageSchema }),
+                defineModel({ name: 'Stage', schema: StageStorageSchema }),
+                defineModel({ name: 'Task', schema: TaskStorageSchema })
             ]
         });
         const statements = compileDefineStatements(snapshot);
 
-        const db = new Surreal({ engines: createNodeEngines() });
-        await db.connect('mem://');
-        await db.use({ namespace: 'mission_core_schema_test', database: 'mission' });
+        const database = SurrealDatabase.forExternal({
+            namespace: `mission_core_schema_test_${randomUUID().replace(/-/g, '_')}`
+        });
+        const db = await database.getClient();
 
         try {
             await db.query(statements.join('\n'));
@@ -86,7 +86,7 @@ describe('Mission Surreal schema compilation', () => {
             expect(taskInfo.fields?.['missionId']).toContain('record<mission>');
             expect(taskInfo.fields?.['stageId']).toContain('record<stage>');
         } finally {
-            await db.close();
+            await database.stop();
         }
     });
 });

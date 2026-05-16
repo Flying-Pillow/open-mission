@@ -2,11 +2,10 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import ignore, { type Ignore } from 'ignore';
-import { CODE_INDEXER_VERSION } from './CodeGraphSchema.js';
+import { CODE_INDEXER_VERSION, createCodeFileObjectKey, createCodeRootObjectKey, type CodeGraphObjectDraft, type CodeGraphRelationDraft, type CodeGraphReplaceIndexInput } from './CodeGraphSchema.js';
 import { createDefaultCodeLanguageRegistry, type CodeLanguageRegistry } from './CodeLanguageRegistry.js';
 import { createDefaultCodeExtractionProviders } from './TypeScriptCodeExtractionProvider.js';
 import type { CodeExtractionProvider, CodeIndexedFileDraft } from './CodeExtractionProvider.js';
-import type { CodeGraphReplaceIndexInput } from './CodeGraphStore.js';
 
 export type CodeIndexerResult = CodeGraphReplaceIndexInput;
 
@@ -34,23 +33,51 @@ export class CodeIndexer {
             throw new Error('CodeIndexer requires a Code root path.');
         }
         const files = await this.readSourceFiles(rootPath);
-        const symbols: CodeGraphReplaceIndexInput['symbols'] = [];
-        const relations: CodeGraphReplaceIndexInput['relations'] = [];
+        const rootObjectKey = createCodeRootObjectKey();
+        const objects: CodeGraphObjectDraft[] = [
+            {
+                objectKey: rootObjectKey,
+                objectKind: 'root',
+                path: '.'
+            },
+            ...files.map((file) => ({
+                objectKey: file.objectKey,
+                objectKind: file.objectKind,
+                path: file.path,
+                language: file.language,
+                sizeBytes: file.sizeBytes,
+                contentHash: file.contentHash
+            }))
+        ];
+        const relations: CodeGraphRelationDraft[] = files.map((file) => ({
+            inObjectKey: rootObjectKey,
+            relationKind: 'contains',
+            outObjectKey: file.objectKey
+        }));
         for (const file of files) {
             for (const provider of this.extractionProviders) {
                 if (!provider.canExtract(file)) {
                     continue;
                 }
                 const result = await provider.extract({ rootPath, file, files });
-                symbols.push(...result.symbols);
+                objects.push(...result.objects);
                 relations.push(...result.relations);
+                for (const object of result.objects) {
+                    if (object.objectKind !== 'symbol') {
+                        continue;
+                    }
+                    relations.push({
+                        inObjectKey: file.objectKey,
+                        relationKind: 'defines',
+                        outObjectKey: object.objectKey
+                    });
+                }
             }
         }
         return {
             rootPath,
             rootFingerprint: createRootFingerprint(files),
-            files: files.map(({ content: _content, ...file }) => file),
-            symbols,
+            objects,
             relations
         };
     }
@@ -82,6 +109,8 @@ export class CodeIndexer {
                 continue;
             }
             files.push({
+                objectKey: createCodeFileObjectKey(relativePath),
+                objectKind: classifyFileObjectKind(relativePath, this.languageRegistry.detectLanguage(relativePath)),
                 path: relativePath,
                 language: this.languageRegistry.detectLanguage(relativePath),
                 sizeBytes: Buffer.byteLength(content, 'utf8'),
@@ -195,4 +224,11 @@ function createRootFingerprint(files: CodeIndexedFileDraft[]): string {
 
 function hashContent(content: string): string {
     return createHash('sha256').update(content).digest('hex');
+}
+
+function classifyFileObjectKind(filePath: string, language: string): 'file' | 'document' {
+    if (language === 'markdown' || language === 'unknown' || filePath.endsWith('.md') || filePath.endsWith('.mdx')) {
+        return 'document';
+    }
+    return 'file';
 }

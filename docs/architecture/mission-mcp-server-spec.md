@@ -8,7 +8,7 @@ description: Temporary working spec for realizing the daemon-owned open-mission-
 
 ## Temporary Mission MCP Server Spec
 
-> Current authority: this temporary spec contains pre-convergence AgentExecutor wording. Where it conflicts with `CONTEXT.md`, ADR-0006.01, ADR-0006.05, ADR-0006.06, or ADR-0006.10 as updated on 2026-05-13, follow the newer rule: MCP is a structured input channel into the owning `AgentExecution` instance; `AgentExecution` owns process lifecycle and observation intake; `AgentExecutor` is legacy vocabulary or a private collaborator only.
+> Current authority: MCP is a structured input channel into the owning `AgentExecution` instance. `AgentExecution` owns process lifecycle and observation intake. `AgentExecutionRegistry` provides lookup and process-handle plumbing.
 
 This is the MCP transport realization slice for the Agent execution structured interaction architecture described by ADR-0006.05 and ADR-0006.06.
 
@@ -25,26 +25,22 @@ It is temporary on purpose. It exists so implementation can proceed from one str
 - ADR-0006.06: `open-mission-mcp` is the daemon-owned MCP signal transport.
 - Agent Execution Structured Interaction Spec: controlling descriptor, observation, owner-routing, and signal vocabulary implementation reference.
 
-## Greenfield Constraint
+## Greenfield Shape
 
-This implementation is clean-sheet within the current architecture. Do not preserve old names, old module paths, old transport assumptions, or transitional compatibility layers.
+This implementation is clean-sheet within the current architecture. It uses the current names, module paths, transport assumptions, and contracts in this spec.
 
-Forbidden:
+The target shape is:
 
-- Obsolete server-name aliases, redirects, compatibility config entries, or environment variables.
-- Compatibility exports from old module names.
-- A second MCP server name for the same daemon service.
-- Duplicated MCP-local copies of Agent signal schemas.
-- Direct workflow mutation from MCP tool handlers.
-- Hidden fallback from failed MCP provisioning to stdout markers.
-- Runtime branches that pretend a session has MCP when provisioning failed.
-- Loose helper files that own behavior better owned by AgentExecution, AgentAdapter, AgentExecutor, AgentExecutionRegistry, Terminal, or a named daemon runtime object.
-
-Allowed:
-
-- Non-MCP Agent runtimes may use stdout-marker signal delivery when their protocol descriptor declares that delivery from the start.
-- MCP-capable Agent runtimes may use a stdio bridge process when the bridge is only a transport adapter to the daemon-owned `open-mission-mcp` service.
-- Small pure functions may live near the class that owns their behavior when they are private implementation details, not reusable cross-domain utilities.
+- One daemon MCP service name: `open-mission-mcp`.
+- Current module names and import paths only.
+- Canonical AgentExecution signal schemas reused by MCP and stdout-marker delivery.
+- Workflow effects routed through AgentExecution observation handling and the owning Entity path.
+- MCP provisioning resolved before launch when the selected delivery is `mcp-tool`.
+- Runtime MCP state reflecting actual provisioning success.
+- Helper code placed beside the owning behavior: AgentExecution, AgentAdapter, AgentExecutionRegistry, Terminal, or a named daemon runtime object.
+- Non-MCP Agent runtimes using stdout-marker signal delivery when their protocol descriptor declares that delivery from the start.
+- MCP-capable Agent runtimes using a stdio bridge process when the bridge is only a transport adapter to the daemon-owned `open-mission-mcp` service.
+- Small pure functions living near the class that owns their behavior when they are private implementation details.
 
 ## Target Runtime Shape
 
@@ -55,7 +51,7 @@ daemon startup
       -> session-scoped MCP access registry
       -> dynamic tool materialization from AgentExecution protocol descriptors
 
-AgentExecutor.startExecution
+AgentExecution launch
   -> create AgentExecution id
   -> inspect AgentAdapter transport capabilities
   -> choose selected Agent signal delivery from Mission policy and launch mode
@@ -69,13 +65,13 @@ Agent runtime MCP tool call
   -> open-mission-mcp tool ingress
   -> canonical Agent signal schema validation
   -> AgentExecutionRegistry route by Agent execution id
-  -> AgentExecutor transport-neutral observation entry point
+  -> AgentExecution transport-neutral observation entry point
   -> AgentExecution observation idempotency and policy
   -> owning Entity behavior
   -> AgentExecution state, Entity event, workflow event, or rejection
 ```
 
-`open-mission-mcp` is not an Entity, not a workflow owner, not a repository API, and not a public automation API. It is daemon runtime infrastructure that exposes per-execution structured signal transport to Agent runtimes.
+`open-mission-mcp` is daemon runtime infrastructure that exposes per-execution structured signal transport to Agent runtimes. Entity behavior, workflow behavior, repository access, and public automation semantics stay with their owning boundaries.
 
 ## Ownership Map
 
@@ -109,20 +105,20 @@ type AgentSignalDescriptor = {
 };
 ```
 
-Use `deliveries`. Do not keep the old singular `delivery` field as an alias. This is a greenfield schema correction, not a migration path.
+Use `deliveries` as the schema field. This is a greenfield schema correction rather than a migration path.
 
 AgentExecution must expose enough protocol data for both prompt instruction rendering and MCP tool materialization. MCP must read the same signal descriptors that stdout-marker instructions read.
 
-AgentExecution also owns the observation idempotency invariant. Implement this as an Entity-bound value object or state component, for example `AgentExecutionObservationLedger`, inside `packages/core/src/entities/AgentExecution/`. It must not be a daemon-global utility.
+AgentExecution also owns the observation idempotency invariant. Implement this as an Entity-bound value object or state component, for example `AgentExecutionObservationLedger`, inside `packages/core/src/entities/AgentExecution/`.
 
 Ledger rules:
 
 - The idempotency scope is one AgentExecution id.
 - Agent signals require an Agent-supplied `eventId`.
 - The same event id may create at most one accepted normalized observation for that AgentExecution.
-- Duplicate event ids must not re-run policy effects, Entity event publication, workflow effects, or AgentExecution state transitions.
+- Duplicate event ids return replay-aware acknowledgement without repeating policy effects, Entity event publication, workflow effects, or AgentExecution state transitions.
 - Duplicate acknowledgement reports replay handling.
-- Provider and terminal observations that do not carry Agent event ids use explicit daemon-generated observation ids or deterministic dedupe keys according to their origin.
+- Provider and terminal observations without Agent event ids use explicit daemon-generated observation ids or deterministic dedupe keys according to their origin.
 
 ### MissionMcpServer
 
@@ -145,13 +141,13 @@ Responsibilities:
 - Return delivery acknowledgements.
 - Reject unknown, unauthorized, mismatched, unsupported, oversized, duplicate, or stopped-session calls.
 
-It does not own:
+Related ownership stays outside `MissionMcpServer`:
 
-- AgentExecution state transitions.
-- Mission, Task, Repository, Artifact, or workflow behavior.
-- Entity command dispatch.
-- Adapter-specific MCP config file syntax.
-- Terminal IO.
+- AgentExecution owns state transitions.
+- Mission, Task, Repository, Artifact, and workflow modules own their behavior.
+- Entity command dispatch stays with Entity command infrastructure.
+- AgentAdapters own adapter-specific MCP config file syntax.
+- Terminal owns terminal IO.
 
 `MissionMcpServer` may contain private collaborator classes when each has a named responsibility and stays inside the MCP daemon runtime boundary:
 
@@ -159,11 +155,11 @@ It does not own:
 - `MissionMcpToolCatalog`: materializes MCP tool descriptors from AgentExecution protocol descriptors.
 - `MissionMcpToolCall`: validates one inbound call and normalizes it to an Agent signal input.
 
-Do not create generic `mcpUtils`, `signalHelpers`, or cross-package helper modules. If a behavior belongs to AgentExecution schema, put it in the AgentExecution boundary. If it belongs to adapter config translation, put it in the AgentAdapter boundary. If it belongs to daemon startup, keep it in daemon composition.
+Helper modules are named for the behavior owner. AgentExecution schema behavior lives in the AgentExecution boundary, adapter config translation lives in the AgentAdapter boundary, and daemon startup behavior stays in daemon composition.
 
 ### AgentExecutionRegistry
 
-AgentExecutionRegistry is the daemon collection and lookup boundary for active AgentExecution instances. `open-mission-mcp` must route through it instead of keeping its own execution map with domain meaning.
+AgentExecutionRegistry is daemon-internal lookup and process-handle plumbing for active AgentExecution instances. `open-mission-mcp` must route through it instead of keeping its own execution map with domain meaning.
 
 Add a narrow routing method to AgentExecutionRegistry, such as:
 
@@ -176,38 +172,31 @@ The exact names can change, but the method must:
 - Require an AgentExecution id.
 - Resolve the active registry entry.
 - Reject final or missing executions.
-- Delegate policy and state effects through the registered AgentExecutor or AgentExecution-owned observation path.
+- Delegate policy and state effects through the registered AgentExecution-owned observation path.
 - Return a schema-backed acknowledgement.
 
-AgentExecutionRegistry may also publish MCP access state in AgentExecution data when Open Mission needs it, but it must not become an MCP protocol server or adapter-specific config writer.
+AgentExecutionRegistry may also publish MCP access state in AgentExecution data when Open Mission needs it. MCP protocol serving, adapter-specific config writing, lifecycle coordination, and session control stay with their owning components.
 
-### AgentExecutor
+### AgentExecution Launch And Observation Path
 
-AgentExecutor remains the daemon-owned lifecycle coordinator for one started Agent execution.
-
-New responsibilities:
+AgentExecution owns the launch and observation path for one started Agent execution:
 
 - Ask the selected AgentAdapter for transport capabilities before launch.
-- Choose the selected Agent signal delivery from adapter capability, Mission policy, launch mode, and runtime constraints.
+- Choose the selected Agent signal delivery from adapter capability, Mission policy, launch mode, and process constraints.
 - Create the AgentExecution protocol descriptor with the selected signal delivery.
 - Register MCP access with `MissionMcpServer` before provider launch when the selected delivery is `mcp-tool`.
 - Pass ephemeral MCP access material to the AgentAdapter launch preparation path when MCP is selected.
-- Record the small AgentExecution transport state.
+- Record selected transport state.
 - Expose one transport-neutral observation entry point used by stdout parsing, provider output, terminal diagnostics, and MCP tool calls.
 - Dispose registered MCP access during execution cleanup.
 
-AgentExecutor must not:
-
-- Generate MCP tool schemas itself.
-- Write provider-specific MCP config files directly.
-- Keep a second idempotency ledger outside AgentExecution.
-- Mutate owner Entity workflow state directly from MCP calls.
+Private launch helpers coordinate launch mechanics. MCP tool schemas come from AgentExecution descriptors, provider-specific MCP config files come from AgentAdapter preparation, idempotency stays with AgentExecution, and owner Entity workflow state changes through owner behavior.
 
 ### AgentAdapter
 
 AgentAdapter owns provider-specific translation. MCP client provisioning for Claude Code, Copilot CLI, OpenCode, Codex, Pi, or future adapters belongs here or in adapter-owned strategy objects.
 
-Separate provider capability from launch selection. The adapter advertises what the provider can support; AgentExecutor chooses what this execution will use and records the selected delivery in AgentExecution transport state.
+Separate provider capability from launch selection. The adapter advertises what the provider can support; AgentExecution chooses what this execution will use and records the selected delivery in AgentExecution transport state.
 
 Suggested adapter capability shape:
 
@@ -232,7 +221,7 @@ type AgentExecutionTransportState = {
 
 `supported` answers provider capability, for example whether Claude Code can use MCP at all. `AgentExecutionTransportState.selected` answers the launch contract for this execution, for example whether a simple print-mode launch intentionally selected `stdout-marker` even though the provider supports MCP.
 
-For this greenfield realization, do not model transport as a single `mcp-required`, `mcp-optional`, or `stdout-marker-only` adapter field. Those names mix provider capability and Mission launch policy. Silent fallback after selecting MCP is forbidden.
+For this greenfield realization, model provider capability and selected execution delivery separately. A single adapter field such as `mcp-required`, `mcp-optional`, or `stdout-marker-only` mixes provider capability with Mission launch policy.
 
 Adapter launch preparation receives an ephemeral MCP access object only when `AgentExecutionTransportState.selected` is `mcp-tool`. That object may include:
 
@@ -243,9 +232,9 @@ Adapter launch preparation receives an ephemeral MCP access object only when `Ag
 - dynamic tool descriptors
 - config cleanup callback
 
-Do not store tokens or per-execution config in tracked repository files. Do not put secrets into durable AgentExecution data. Static project config may refer to `open-mission-mcp` only through environment-variable placeholders or adapter-owned untracked runtime files.
+Tokens and per-execution config live in ephemeral daemon or adapter-owned runtime material. Durable AgentExecution data stays secret-free. Static project config may refer to `open-mission-mcp` only through environment-variable placeholders or adapter-owned untracked runtime files.
 
-If the selected delivery is `mcp-tool` and MCP provisioning fails, the launch fails. The daemon may create a new execution attempt that selects `stdout-marker` only when Mission policy and operator intent permit that before launch. It must not mutate the active execution from MCP to stdout markers and call that degradation transparent.
+If the selected delivery is `mcp-tool` and MCP provisioning fails, the launch fails. The daemon may create a new execution attempt that selects `stdout-marker` only when Mission policy and operator intent permit that before launch. Active executions keep the delivery selected in their launch contract.
 
 ### Daemon Startup
 
@@ -274,11 +263,11 @@ Suggested command shape:
 mission mcp connect --agent-execution <id>
 ```
 
-This command is not the authoritative MCP server. It is an adapter between a stdio MCP client and the daemon-owned `open-mission-mcp` service. If the daemon is stopped, the bridge fails. It must not create Mission state, parse workflows, or keep its own AgentExecution registry.
+This command is an adapter between a stdio MCP client and the daemon-owned `open-mission-mcp` service. If the daemon is stopped, the bridge fails. Mission state, workflow parsing, and AgentExecution registry ownership stay in the daemon.
 
 ## Protocol Descriptor Realization
 
-The protocol descriptor defined by Agent Execution Structured Interaction Spec is the single source for both transports. The shape is restated here only to show the MCP fields that `open-mission-mcp` consumes; do not evolve this copy independently.
+The protocol descriptor defined by Agent Execution Structured Interaction Spec is the single source for both transports. The shape is restated here only to show the MCP fields that `open-mission-mcp` consumes; changes to descriptor shape happen in the umbrella spec first.
 
 Suggested shape:
 
@@ -299,7 +288,7 @@ type AgentExecutionProtocolDescriptor = {
 
 The `mcp` field is descriptor metadata, not a place to store secrets or live endpoint data. Ephemeral endpoint and token material belongs to launch preparation and daemon runtime access records.
 
-Signal descriptors decide whether a signal can be delivered by `stdout-marker`, `mcp-tool`, or both. The implementation must not create separate `McpProgressPayload`, `McpNeedsInputPayload`, or similar duplicates.
+Signal descriptors decide whether a signal can be delivered by `stdout-marker`, `mcp-tool`, or both. MCP uses the same signal payload schemas as every other delivery path.
 
 ## MCP Tool Shape
 
@@ -324,7 +313,7 @@ Each tool call must carry or be bound to:
 
 The tool catalog is dynamic per AgentExecution. A tool exists only when that execution's protocol descriptor includes the matching signal descriptor with `mcp-tool` delivery.
 
-Do not treat tool names as stable public API. They are provisioned transport affordances. If descriptor growth causes tool explosion, replace the presentation with a descriptor-backed `emit_signal` tool in one change. Do not keep both shapes as compatibility aliases.
+Tool names are provisioned transport affordances rather than stable public API. If descriptor growth causes tool explosion, replace the presentation with a descriptor-backed `emit_signal` tool in one clean change.
 
 ## Observation Acknowledgement
 
@@ -351,7 +340,7 @@ Acknowledgements are delivery feedback only. They are not verification success, 
 - Update baseline descriptors to use `deliveries`.
 - Add descriptor metadata for `open-mission-mcp` when any signal supports `mcp-tool`.
 - Update tests without keeping old field aliases.
-- Keep this step in lockstep with Agent Execution Structured Interaction Spec. Do not implement a different MCP-local descriptor shape.
+- Keep this step in lockstep with Agent Execution Structured Interaction Spec. MCP consumes the AgentExecution descriptor shape directly.
 
 ### 2. Add AgentExecution Observation Idempotency
 
@@ -371,7 +360,7 @@ Acknowledgements are delivery feedback only. They are not verification success, 
 ### 4. Add Registry And Executor Routing
 
 - Add AgentExecutionRegistry routing for transport observations.
-- Add AgentExecutor transport-neutral observation entry point.
+- Add AgentExecution transport-neutral observation entry point.
 - Reuse the same policy and owner-routing path for stdout, provider, terminal, and MCP observations.
 - Remove any duplicated MCP-specific policy branch.
 
@@ -409,7 +398,7 @@ Minimum tests:
 - MissionMcpServer registers per-execution access and materializes only descriptor-allowed tools.
 - MCP tool calls validate against canonical Agent signal payload schemas.
 - MCP tool calls route to the same observation policy path as stdout markers.
-- Duplicate event ids do not repeat policy, Entity event, workflow, or AgentExecution state effects.
+- Duplicate event ids return replay-aware acknowledgements without repeating policy, Entity event, workflow, or AgentExecution state effects.
 - Unknown execution, final execution, wrong token, unsupported tool, invalid payload, and oversized payload calls are rejected.
 - Adapter capability tests distinguish supported transports, preferred transport, and provisioning features.
 - Selected-delivery tests show MCP-capable adapters can still select stdout markers for launch modes or runtime constraints that require them.
@@ -428,9 +417,9 @@ pnpm --filter @flying-pillow/open-mission build
 
 ## Constitutionality Checklist
 
-- Clear owner: AgentExecution owns signal schemas, descriptors, observations, and idempotency; MissionMcpServer owns MCP ingress; AgentAdapter owns provider config translation; AgentExecutor owns launch coordination; AgentExecutionRegistry owns active lookup.
+- Clear owner: AgentExecution owns signal schemas, descriptors, observations, idempotency, and launch coordination; MissionMcpServer owns MCP ingress; AgentAdapter owns provider config translation; AgentExecutionRegistry owns active lookup and process-handle plumbing.
 - DRY: MCP uses AgentExecution signal schemas and descriptors directly.
-- OOD: behavior lives in named Entity, adapter, registry, executor, or daemon runtime classes.
+- OOD: behavior lives in named Entity, adapter, registry, or daemon runtime classes.
 - Contract-first: tool calls, descriptors, access records, and acknowledgements are schema-backed.
 - Repo-native: no per-execution secrets in tracked files.
 - Provider-neutral: Mission core does not import provider-specific MCP config assumptions.

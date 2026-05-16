@@ -4,24 +4,17 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createSurrealEntityFactory } from '../../lib/factory.js';
 import {
-    resolveRepositoryDatabasePath,
-    SurrealDatabase
-} from '../../lib/database/SurrealDatabase.js';
-import { SurrealEntityStore } from '../../lib/database/SurrealEntityStore.js';
-import { AgentExecution } from './AgentExecution.js';
-import { agentExecutionJournalTableName } from './AgentExecutionSchema.js';
+    clearSurrealTables,
+    createTestSurrealDatabase,
+    TEST_SURREAL_DATABASE,
+    TEST_SURREAL_NAMESPACE
+} from '../../lib/database/SurrealTestDatabase.js';
+import { AgentExecution, AgentExecutionJournalRecord } from './AgentExecution.js';
 
 describe('AgentExecution repository storage smoke test', () => {
-    it('creates a repository-owned AgentExecution in the repository SurrealDB database', async () => {
-        const repositoryRootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-agent-execution-repo-'));
-        const ownerLocation = {
-            ownerEntity: 'Repository' as const,
-            repositoryRootPath
-        };
-        const namespace = 'open_mission_agent_execution_smoke_test';
-        const factory = createSurrealEntityFactory({ ownerLocation, namespace });
-        const database = SurrealDatabase.sharedForOwner({ ...ownerLocation, namespace });
-        const databasePath = resolveRepositoryDatabasePath(repositoryRootPath);
+    it('creates an AgentExecution in the external SurrealDB database', async () => {
+        const database = createTestSurrealDatabase({ shared: true });
+        const factory = createSurrealEntityFactory({ database });
         const data = AgentExecution.createData({
             ownerEntity: 'Repository',
             ownerId: 'repository-smoke',
@@ -30,6 +23,7 @@ describe('AgentExecution repository storage smoke test', () => {
         });
 
         try {
+            await clearSurrealTables(database, ['agent_execution_journal', 'agent_execution']);
             const created = await factory.create(AgentExecution, data);
             const read = await factory.read(AgentExecution, created.id);
 
@@ -37,15 +31,13 @@ describe('AgentExecution repository storage smoke test', () => {
             expect(read?.toData()).toEqual(data);
             expect(database.readStatus()).toMatchObject({
                 available: true,
-                engine: 'surrealkv',
-                namespace,
-                database: 'mission',
-                storagePath: databasePath
+                engine: 'remote',
+                namespace: TEST_SURREAL_NAMESPACE,
+                database: TEST_SURREAL_DATABASE
             });
-            await expect(fs.stat(databasePath)).resolves.toBeDefined();
         } finally {
+            await clearSurrealTables(database, ['agent_execution_journal', 'agent_execution']);
             await database.stop();
-            await fs.rm(repositoryRootPath, { recursive: true, force: true });
         }
     });
 
@@ -92,21 +84,18 @@ describe('AgentExecution repository storage smoke test', () => {
         }
 
         const repositoryRootPath = resolveCurrentRepositoryRootPath();
-        const ownerLocation = {
-            ownerEntity: 'Repository' as const,
-            repositoryRootPath
-        };
-        const database = SurrealDatabase.sharedForOwner(ownerLocation);
-        const factory = createSurrealEntityFactory({ ownerLocation });
-        const journalStore = new SurrealEntityStore(database);
-        const execution = await factory.save(AgentExecution, AgentExecution.createData({
-            ownerEntity: 'Repository',
-            ownerId: 'open-mission',
-            agentId: 'copilot-cli',
-            agentExecutionId: 'execution-copilot-smoke'
-        }));
+        const database = createTestSurrealDatabase({ shared: true });
+        const factory = createSurrealEntityFactory({ database });
+        let execution: AgentExecution;
 
         try {
+            await clearSurrealTables(database, ['agent_execution_journal', 'agent_execution']);
+            execution = await factory.save(AgentExecution, AgentExecution.createData({
+                ownerEntity: 'Repository',
+                ownerId: 'open-mission',
+                agentId: 'copilot-cli',
+                agentExecutionId: 'execution-copilot-smoke'
+            }));
             await execution.startProcess({
                 command: copilotCommand,
                 args: [
@@ -129,7 +118,7 @@ describe('AgentExecution repository storage smoke test', () => {
                     workingDirectory: repositoryRootPath
                 }
             });
-            await journalStore.write(agentExecutionJournalTableName, startRecord.id, startRecord);
+            await factory.save(AgentExecutionJournalRecord, startRecord);
             await factory.save(AgentExecution, execution.toData());
             const completed = await execution.waitForProcessExit(60_000);
             const completionRecord = execution.appendJournalRecord({
@@ -143,7 +132,7 @@ describe('AgentExecution repository storage smoke test', () => {
                     ...(completed.signal ? { signal: completed.signal } : {})
                 }
             });
-            await journalStore.write(agentExecutionJournalTableName, completionRecord.id, completionRecord);
+            await factory.save(AgentExecutionJournalRecord, completionRecord);
             await factory.save(AgentExecution, execution.toData());
             if (isCopilotAuthenticationFailure(completed)) {
                 console.warn('Skipping Copilot CLI hello assertion because local Copilot auth cannot complete a request.');
@@ -175,16 +164,64 @@ describe('AgentExecution repository storage smoke test', () => {
                 { kind: 'process.completed', sequence: 2 }
             ]);
             expect(database.readStatus()).toMatchObject({
-                engine: 'surrealkv',
-                namespace: 'open_mission',
-                database: 'mission',
-                storagePath: resolveRepositoryDatabasePath(repositoryRootPath)
+                engine: 'remote',
+                namespace: TEST_SURREAL_NAMESPACE,
+                database: TEST_SURREAL_DATABASE
             });
         } finally {
             await execution.stopProcess().catch(() => undefined);
+            await clearSurrealTables(database, ['agent_execution_journal', 'agent_execution']);
             await database.stop();
         }
     }, 75_000);
+
+    it('accepts sendMessage payloads without locator fields', async () => {
+        const acceptedMessages: unknown[] = [];
+        const execution = new AgentExecution(AgentExecution.createData({
+            ownerEntity: 'Repository',
+            ownerId: 'repository-send-message',
+            agentId: 'agent-send-message',
+            agentExecutionId: 'execution-send-message'
+        }));
+
+        const acknowledgement = await execution.sendMessage({
+            message: {
+                kind: 'operator.prompt',
+                payload: { text: 'Continue.' },
+                startsTurn: true
+            }
+        }, {
+            surfacePath: '/tmp/open-mission',
+            agentExecutionJournalWriter: {
+                appendMessageAccepted: async (input) => {
+                    acceptedMessages.push(input.message);
+                }
+            }
+        });
+
+        expect(acknowledgement).toMatchObject({
+            ok: true,
+            entity: 'AgentExecution',
+            method: 'sendMessage',
+            id: execution.id,
+            agentExecutionId: 'execution-send-message',
+            accepted: true
+        });
+        expect(acceptedMessages).toEqual([
+            expect.objectContaining({
+                message: expect.objectContaining({
+                    kind: 'operator.prompt',
+                    payload: { text: 'Continue.' },
+                    startsTurn: true,
+                    source: 'operator',
+                    messageId: expect.any(String)
+                })
+            })
+        ]);
+        expect(execution.toData()).toMatchObject({
+            activity: 'awaiting-agent-response'
+        });
+    });
 });
 
 function resolveCurrentRepositoryRootPath(): string {

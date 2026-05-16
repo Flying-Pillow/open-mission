@@ -10,7 +10,6 @@ import {
     WorkflowDefinitionSchema,
 } from '../WorkflowSchema.js';
 import {
-    DEFAULT_TASK_MAX_REWORK_ITERATIONS,
     MISSION_AGENT_EXECUTION_LIFECYCLE_STATES,
     MISSION_LIFECYCLE_STATES,
     MISSION_STAGE_DERIVED_STATES,
@@ -18,12 +17,13 @@ import {
 } from './constants.js';
 
 export {
-    DEFAULT_TASK_MAX_REWORK_ITERATIONS,
     MISSION_AGENT_EXECUTION_LIFECYCLE_STATES,
     MISSION_LIFECYCLE_STATES,
     MISSION_STAGE_DERIVED_STATES,
     MISSION_TASK_LIFECYCLE_STATES
 } from './constants.js';
+
+export { DEFAULT_TASK_MAX_REWORK_ITERATIONS } from './constants.js';
 
 export type MissionStageId = string;
 
@@ -124,7 +124,7 @@ export const WorkflowPauseStateSchema = z.object({
     paused: z.boolean(),
     reason: z.enum(['human-requested', 'checkpoint', 'agent-failure', 'system']).optional(),
     targetType: z.enum(['mission', 'task', 'AgentExecution']).optional(),
-    targetId: nonEmptyStringSchema.optional(),
+    id: nonEmptyStringSchema.optional(),
     requestedAt: nonEmptyStringSchema.optional()
 }).strict();
 
@@ -264,7 +264,7 @@ export interface WorkflowPausedEvent extends WorkflowEventBase {
     type: 'mission.paused';
     reason: WorkflowPauseReason;
     targetType?: 'mission' | 'task' | 'AgentExecution';
-    targetId?: string;
+    id?: string;
 }
 
 export interface WorkflowLaunchQueueRestartedEvent extends WorkflowEventBase {

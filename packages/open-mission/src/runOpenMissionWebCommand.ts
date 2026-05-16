@@ -24,7 +24,6 @@ export async function runOpenMissionWebCommand(context: EntryContext): Promise<v
             HOST: host,
             PORT: port,
             ORIGIN: process.env['ORIGIN']?.trim() || url,
-            OPEN_MISSION_SURFACE_PATH: process.env['OPEN_MISSION_SURFACE_PATH']?.trim() || context.repositoryRootPath,
             OPEN_MISSION_REPOSITORY_ROOT: context.repositoryRootPath,
             OPEN_MISSION_ENTRY_CWD: context.workingDirectory
         }

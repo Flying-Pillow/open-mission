@@ -98,7 +98,7 @@ class WorkflowTransitionEngine {
                     paused: true,
                     reason: event.reason,
                     ...(event.targetType ? { targetType: event.targetType } : {}),
-                    ...(event.targetId ? { targetId: event.targetId } : {}),
+                    ...(event.id ? { id: event.id } : {}),
                     requestedAt: event.occurredAt
                 };
                 return;
@@ -514,7 +514,7 @@ function enforceLifecycleInvariants(
                 paused: true,
                 reason: state.pause.reason ?? 'human-requested',
                 ...(state.pause.targetType ? { targetType: state.pause.targetType } : {}),
-                ...(state.pause.targetId ? { targetId: state.pause.targetId } : {}),
+                ...(state.pause.id ? { id: state.pause.id } : {}),
                 requestedAt: state.pause.requestedAt ?? occurredAt
             };
             return;

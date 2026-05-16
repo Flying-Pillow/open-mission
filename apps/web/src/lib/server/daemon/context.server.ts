@@ -5,9 +5,9 @@ export function resolveRequestAuthToken(locals?: App.Locals): string | undefined
 }
 
 export function resolveSurfacePath(): string {
-    const configuredSurfacePath = process.env['OPEN_MISSION_SURFACE_PATH']?.trim();
-    if (configuredSurfacePath && configuredSurfacePath.length > 0) {
-        return configuredSurfacePath;
+    const repositoryRootPath = process.env['OPEN_MISSION_REPOSITORY_ROOT']?.trim();
+    if (repositoryRootPath && repositoryRootPath.length > 0) {
+        return repositoryRootPath;
     }
 
     return process.cwd();

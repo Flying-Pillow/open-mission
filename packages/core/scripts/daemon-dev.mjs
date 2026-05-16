@@ -103,7 +103,7 @@ async function loadDaemonModule() {
 async function startDaemonFromModule(module) {
 	return await module.startOpenMissionDaemon({
 		argv: process.argv.slice(2),
-		surfacePath: process.env.OPEN_MISSION_SURFACE_PATH,
+		surfacePath: process.env.OPEN_MISSION_REPOSITORY_ROOT,
 		installSignalHandlers: false
 	});
 }

@@ -1,7 +1,7 @@
 # Copilot Instructions for Mission
 
-use .agents/constitution.md and CONTEXT.md
+Use .agents/constitution.md and CONTEXT.md as the first authority surface for every task.
 
-all Architectural and Domain Modeling decisions are located in the docs/adr folder.
-  
+Architectural and domain-modeling decisions are governed by the accepted and proposed ADRs in docs/adr.
+
 SKILLS are located in the .agents/skills folder.

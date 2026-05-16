@@ -3,12 +3,14 @@ layout: default
 title: Agents, Runtimes, and Models
 parent: User Manual
 nav_order: 3
-description: How Mission attaches agent execution to governed work.
+description: How Open Mission runs Agent executions under governed owners.
 ---
 
-An Agent execution is daemon-managed execution attached to a Mission, usually focused on one Mission task. For terminal-backed task executions, Mission inserts mandatory signal instructions into the initial prompt so the Agent can report advisory state through strict stdout markers.
+An Agent execution is one daemon-owned run of one Agent under an explicit owner reference. The owner can be System, Repository, Mission, Task, or Artifact, and the interaction model stays the same for every owner.
 
-The selected Agent adapter receives bounded context: task instructions, relevant artifacts, and structured Agent execution messages. Runtime delivery is best effort; it is not proof that the model understood or completed the work.
+For terminal-backed executions, Open Mission can attach a Terminal as an optional transport lane. The AgentExecution still owns the execution lifecycle, structured messages, accepted observations, journal, and operator-facing state.
+
+The selected Agent adapter receives bounded launch and message material from AgentExecution, such as task instructions, relevant artifacts, and structured Agent execution messages. Runtime delivery is best effort; accepted state comes from AgentExecution observations, decisions, owner effects, and journal records.
 
 Supported signal markers include:
 
@@ -21,6 +23,6 @@ Supported signal markers include:
 - `failed_claim` — report a failure claim
 - `message` — append a short note
 
-Mission parses only exact one-line markers. Plain prose remains useful context, but it is not treated as workflow truth.
+Open Mission accepts exact structured messages and markers through the AgentExecution path. Plain prose remains useful operator context, while workflow truth comes from accepted observations and owner behavior.
 
-Mission keeps runtime choice separate from workflow law. Copilot CLI, pi, and future adapters can sit behind the same Mission control model when their adapters implement the required contract.
+Open Mission keeps runtime choice separate from workflow law. Copilot CLI, Pi, and future adapters can sit behind the same AgentExecution model when their adapters implement the required contract.

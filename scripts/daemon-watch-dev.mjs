@@ -18,7 +18,7 @@ function startDaemon() {
     stdio: 'inherit',
     env: {
       ...process.env,
-      OPEN_MISSION_SURFACE_PATH: projectRoot,
+      OPEN_MISSION_REPOSITORY_ROOT: projectRoot,
       OPEN_MISSION_DAEMON_RUNTIME_MODE: 'source'
     }
   });

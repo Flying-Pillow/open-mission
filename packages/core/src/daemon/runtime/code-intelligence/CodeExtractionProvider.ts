@@ -1,15 +1,21 @@
 import type { CodeFileLanguage } from './CodeGraphSchema.js';
-import type { CodeGraphReplaceIndexInput } from './CodeGraphStore.js';
+import type { CodeGraphObjectDraft, CodeGraphRelationDraft } from './CodeGraphSchema.js';
 
-export type CodeIndexedFileDraft = CodeGraphReplaceIndexInput['files'][number] & {
+export type CodeIndexedFileDraft = {
+    objectKey: string;
+    objectKind: 'file' | 'document';
+    path: string;
+    language: CodeFileLanguage;
+    sizeBytes: number;
+    contentHash: string;
     content: string;
 };
 
 export type CodeExtractionCapability = 'symbols' | 'imports' | 'calls' | 'types' | 'routes' | 'tools' | 'scope-resolution';
 
 export type CodeExtractionResult = {
-    symbols: CodeGraphReplaceIndexInput['symbols'];
-    relations: CodeGraphReplaceIndexInput['relations'];
+    objects: CodeGraphObjectDraft[];
+    relations: CodeGraphRelationDraft[];
 };
 
 export type CodeExtractionProvider = {
@@ -22,7 +28,7 @@ export type CodeExtractionProvider = {
 
 export function createEmptyCodeExtractionResult(): CodeExtractionResult {
     return {
-        symbols: [],
+        objects: [],
         relations: []
     };
 }

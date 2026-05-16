@@ -5,7 +5,7 @@ import {
     AgentConnectionTestResultSchema,
     AgentSchema,
     AgentStorageSchema,
-    AgentFindResultSchema,
+    AgentCollectionSchema,
     AgentFindSchema,
     AgentLocatorSchema,
     AgentTestConnectionInputSchema
@@ -27,7 +27,7 @@ export const AgentContract: EntityContractType = {
         find: {
             kind: 'query',
             payload: AgentFindSchema,
-            result: AgentFindResultSchema,
+            result: AgentCollectionSchema,
             execution: 'class'
         },
         testConnection: {

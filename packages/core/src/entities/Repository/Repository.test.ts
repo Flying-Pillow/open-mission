@@ -4,9 +4,10 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { Repository } from './Repository.js';
-import { createDefaultRepositorySettings, RepositoryDataSchema } from './RepositorySchema.js';
+import { createDefaultRepositorySettings, RepositorySchema } from './RepositorySchema.js';
 import { AgentExecutionSchema, type AgentExecutionType } from '../AgentExecution/AgentExecutionSchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
+import { createFilesystemEntityFactory } from '../../lib/factory.js';
 import { resolveRepositoriesRoot } from '../../settings/OpenMissionInstall.js';
 import { writeOpenMissionConfig } from '../../settings/OpenMissionInstall.js';
 import type { EntityExecutionContext } from '../Entity/Entity.js';
@@ -23,57 +24,34 @@ function createTestAgentExecution(input: {
     scope: LegacyAgentExecutionAddress;
 }): AgentExecutionType {
     const updatedAt = '2026-05-14T10:00:00.000Z';
-    const progress = { state: 'working' as const, updatedAt };
-    const interactionCapabilities = {
-        mode: 'agent-message' as const,
-        canSendTerminalInput: false,
-        canSendStructuredPrompt: true,
-        canSendStructuredCommand: true
-    };
+    const ownerEntity = input.scope.kind === 'system' ? 'System' : 'Repository';
     return AgentExecutionSchema.parse({
         id: input.id,
+        ownerEntity,
         ownerId: input.ownerId,
         agentExecutionId: input.agentExecutionId,
         agentId: input.agentId,
-        process: {
-            agentId: input.agentId,
+        lifecycle: 'running',
+        attention: 'autonomous',
+        activity: 'executing',
+        messageRegistry: {
+            messages: []
+        },
+        transportState: {
+            status: 'unavailable',
+            structuredTransport: 'none'
+        },
+        mcpAvailability: 'unavailable',
+        journal: {
+            journalId: `agent_execution_journal:${input.ownerId}/${input.agentExecutionId}`,
+            ownerEntity,
+            ownerId: input.ownerId,
             agentExecutionId: input.agentExecutionId,
-            scope: input.scope,
-            workingDirectory: input.ownerId,
-            status: 'running',
-            progress,
-            waitingForInput: false,
-            acceptsPrompts: true,
-            acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
-            interactionPosture: 'structured-headless',
-            interactionCapabilities,
-            reference: {
-                agentId: input.agentId,
-                agentExecutionId: input.agentExecutionId
-            },
-            startedAt: updatedAt,
-            updatedAt
-        },
-        adapterLabel: 'Test Agent',
-        lifecycleState: 'running',
-        interactionCapabilities,
-        context: {
-            artifacts: [],
-            instructions: []
-        },
-        supportedMessages: [],
-        scope: input.scope,
-        progress,
-        waitingForInput: false,
-        acceptsPrompts: true,
-        acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
-        interactionPosture: 'structured-headless',
-        reference: {
-            agentId: input.agentId,
-            agentExecutionId: input.agentExecutionId
+            recordCount: 0,
+            lastSequence: 0
         },
         createdAt: updatedAt,
-        lastUpdatedAt: updatedAt
+        updatedAt
     });
 }
 
@@ -164,7 +142,7 @@ describe('Repository', () => {
 
     it('accepts repository data with the retired workflow panic key', () => {
         const workflowConfiguration = createDefaultWorkflowSettings();
-        const parsed = RepositoryDataSchema.parse({
+        const parsed = RepositorySchema.parse({
             ...Repository.create({
                 repositoryRootPath: '/workspaces/connect-four',
                 platformRepositoryRef: 'Flying-Pillow/connect-four'
@@ -481,7 +459,10 @@ describe('Repository', () => {
             });
             expect(result.enabledAgentAdapters).toEqual(settings.enabledAgentAdapters);
             expect(settings.agentAdapter).toBeTruthy();
-            expect(ensureIndex).toHaveBeenCalledWith({ rootPath: repositoryRootPath });
+            expect(ensureIndex).toHaveBeenCalledWith({
+                repositoryId: repository.id,
+                rootPath: repositoryRootPath
+            });
             expect(await exists(Repository.getMissionWorkflowDefinitionPath(repositoryRootPath))).toBe(false);
             expect(data.operationalMode).toBe('setup');
             expect(data.isInitialized).toBe(false);
@@ -490,7 +471,7 @@ describe('Repository', () => {
         }
     });
 
-    it('starts a manual Code intelligence index for a Repository root', async () => {
+    it('starts a manual code graph snapshot build for a Repository root', async () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-index-code-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
 
@@ -501,32 +482,39 @@ describe('Repository', () => {
                 platformRepositoryRef: 'Flying-Pillow/example'
             });
             const ensureIndex = vi.fn().mockResolvedValue({
-                snapshot: {
-                    id: 'code_index_snapshot:test',
-                    indexedAt: '2026-05-12T00:00:00.000Z',
-                    fileCount: 3,
-                    symbolCount: 2,
-                    relationCount: 1
-                }
+                id: 'code_graph_snapshot:test',
+                indexedAt: '2026-05-12T00:00:00.000Z',
+                objects: [
+                    { objectKind: 'file' },
+                    { objectKind: 'file' },
+                    { objectKind: 'document' },
+                    { objectKind: 'symbol' },
+                    { objectKind: 'symbol' }
+                ],
+                relations: [{}]
             });
 
             await expect(repository.indexCode({
                 id: repository.id,
                 repositoryRootPath
             }, {
+                surfacePath: repositoryRootPath,
                 codeIntelligenceService: { ensureIndex }
             })).resolves.toEqual({
                 ok: true,
                 entity: 'Repository',
                 method: 'indexCode',
                 id: repository.id,
-                snapshotId: 'code_index_snapshot:test',
+                snapshotId: 'code_graph_snapshot:test',
                 indexedAt: '2026-05-12T00:00:00.000Z',
                 fileCount: 3,
                 symbolCount: 2,
                 relationCount: 1
             });
-            expect(ensureIndex).toHaveBeenCalledWith({ rootPath: repositoryRootPath });
+            expect(ensureIndex).toHaveBeenCalledWith({
+                repositoryId: repository.id,
+                rootPath: repositoryRootPath
+            });
         } finally {
             await fsp.rm(tempRoot, { recursive: true, force: true });
         }
@@ -886,8 +874,7 @@ describe('Repository', () => {
             config: expect.objectContaining({
                 workingDirectory: repositoriesRootPath,
                 scope: {
-                    kind: 'system',
-                    label: '/repositories'
+                    kind: 'system'
                 },
                 requestedAdapterId: 'copilot-cli',
                 initialPrompt: expect.objectContaining({
@@ -1026,6 +1013,34 @@ describe('Repository', () => {
 
     it('rejects extra fields in daemon-callable static payloads', async () => {
         await expect(Repository.find({ unexpected: true } as never)).rejects.toThrow();
+    });
+
+    it('finds persisted repositories through the entity factory and reports stale checkout state', async () => {
+        const factory = createFilesystemEntityFactory();
+        const repositoryRootPath = path.join(os.tmpdir(), 'mission-persisted-repository-find');
+        const context = {
+            surfacePath: repositoryRootPath,
+            entityFactory: factory
+        } satisfies EntityExecutionContext;
+        const repository = Repository.open(repositoryRootPath);
+
+        await factory.save(Repository, repository.toStorage());
+
+        const result = await Repository.find({
+            select: {
+                where: {
+                    field: 'repositoryRootPath',
+                    value: repositoryRootPath
+                }
+            }
+        }, context);
+
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            id: repository.id,
+            repositoryRootPath,
+            checkoutState: 'not-found'
+        });
     });
 
     it('rejects mismatched daemon-callable instance payloads', async () => {
