@@ -1,6 +1,6 @@
 {
   "name": "@flying-pillow/open-mission-web",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Open Mission web host for browser-based repository and mission workflows.",
   "type": "module",
   "main": "build/index.js",

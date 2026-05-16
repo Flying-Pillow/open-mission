@@ -1,5 +1,12 @@
 # @flying-pillow/open-mission-core
 
+## 0.1.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`2b9569b`](https://github.com/Flying-Pillow/open-mission/commit/2b9569b4c86d218857a0af2e95d6bb89f222390b)]:
+  - @flying-pillow/zod-surreal@0.1.0-alpha.1
+
 ## 0.1.0-alpha.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@flying-pillow/open-mission-core",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Open Mission core workflow orchestrator and mission entity logic",
   "type": "module",
   "publishConfig": {
